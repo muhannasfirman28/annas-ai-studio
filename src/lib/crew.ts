@@ -3,7 +3,7 @@ import { chatCompletion, llmConfigured } from "./llm";
 import { runTool } from "./agent-tools";
 import { templateFile } from "./crew-templates";
 import { listProjectFiles, readProjectFile } from "./project-files";
-import { crewEngine, startCrewOnWorker } from "./crew-client";
+import { crewEngine, runCrewStepOnWorker, startCrewOnWorker } from "./crew-client";
 import type { SessionUser } from "./auth";
 
 /** Orkestrator crew: satu karyawan selesai -> otomatis lanjut ke karyawan berikutnya. */
@@ -308,38 +308,6 @@ async function dispatchCrewRun(input: { runId: string; user: SessionUser }) {
 
   const plan = run.plan as unknown as CrewPlan;
   const fileActions = run.actions.filter((a) => a.kind === "file");
-  const configs = await prisma.aiAgentConfiguration.findMany({
-    where: { employeeId: { in: plan.steps.map((s) => s.employeeId) } },
-  });
-  const configByEmployee = new Map(configs.map((c) => [c.employeeId, c]));
-
-  const steps = plan.steps.map((step) => ({
-    key: step.key,
-    name: step.name,
-    title: step.title,
-    focus: step.focus,
-    task: step.task,
-    description: step.description,
-    note: step.note,
-    employeeId: step.employeeId,
-    files: fileActions
-      .filter((a) => a.employeeId === step.employeeId)
-      .map((a) => {
-        const payload = a.payload as { path: string; purpose?: string };
-        return { path: payload.path, purpose: payload.purpose ?? "" };
-      }),
-  }));
-
-  const agents = plan.steps.map((step) => {
-    const cfg = configByEmployee.get(step.employeeId);
-    return {
-      employeeId: step.employeeId,
-      name: step.name,
-      model: cfg?.model || "minimaxai/minimax-m3.1-flash",
-      systemPrompt: cfg?.systemPrompt || "",
-      enabled: cfg?.enabled ?? false,
-    };
-  });
 
   await prisma.crewRun.update({
     where: { id: run.id },
@@ -347,17 +315,11 @@ async function dispatchCrewRun(input: { runId: string; user: SessionUser }) {
   });
 
   try {
-    await startCrewOnWorker({
-      runId: run.id,
-      brief: plan.brief,
-      projectName: run.project.name,
-      steps,
-      agents,
-      files: fileActions.map((a) => (a.payload as { path: string }).path),
-    });
+    // Satu invoke worker = satu karyawan. Step berikutnya dipicu oleh callback.
+    await dispatchNextStep(run.id);
     return {
       status: "RUNNING" as const,
-      summary: `Crew berjalan di OpenCode: ${plan.steps.length} karyawan · ${fileActions.length} file.`,
+      summary: `Crew berjalan per-step di OpenCode: ${plan.steps.length} karyawan · ${fileActions.length} file.`,
       files: fileActions.map((a) => (a.payload as { path: string }).path),
       done: 0, failed: 0, error: null,
     };
@@ -369,6 +331,155 @@ async function dispatchCrewRun(input: { runId: string; user: SessionUser }) {
     });
     throw e;
   }
+}
+
+const STALE_STEP_MS = 6 * 60_000;
+
+/** Ambil dan kirim satu step ke worker. Dipanggil setelah approve, callback, atau saat poll mendeteksi step macet. */
+export async function dispatchNextStep(runId: string) {
+  const run = await prisma.crewRun.findUnique({
+    where: { id: runId },
+    include: { project: { select: { id: true, name: true } }, actions: { orderBy: { seq: "asc" } } },
+  });
+  if (!run || run.status !== "RUNNING") return { ok: true, skipped: true };
+
+  const plan = run.plan as unknown as CrewPlan;
+  const configs = await prisma.aiAgentConfiguration.findMany({
+    where: { employeeId: { in: plan.steps.map((s) => s.employeeId) } },
+  });
+  const configByEmployee = new Map(configs.map((c) => [c.employeeId, c]));
+  const stepRows = await prisma.crewRunStep.findMany({
+    where: { runId },
+    select: { stepKey: true, status: true, startedAt: true, error: true },
+  });
+  const byKey = new Map(stepRows.map((s) => [s.stepKey, s]));
+  const now = Date.now();
+
+  for (const step of plan.steps) {
+    const row = byKey.get(step.key);
+    if (row?.status === "DONE") continue;
+
+    if (row?.status === "FAILED") {
+      await finalizeCrewRun(runId, "FAILED", row.error || `Step ${step.name} gagal.`);
+      return { ok: true, finalized: true };
+    }
+
+    if (row?.status === "RUNNING") {
+      if (!row.startedAt || now - row.startedAt.getTime() < STALE_STEP_MS) {
+        return { ok: true, waiting: true, stepKey: step.key };
+      }
+      // Worker mati di tengah step; tidak ada callback. Reset supaya dijalankan ulang.
+      await prisma.crewRunStep.updateMany({
+        where: { runId, stepKey: step.key, status: "RUNNING" },
+        data: { status: "PENDING", startedAt: new Date() },
+      });
+    }
+
+    await prisma.crewRunStep.upsert({
+      where: { runId_stepKey: { runId, stepKey: step.key } },
+      create: { runId, stepKey: step.key, agentId: step.key, status: "PENDING" },
+      update: {},
+    });
+
+    const claimed = await prisma.crewRunStep.updateMany({
+      where: { runId, stepKey: step.key, status: "PENDING" },
+      data: { status: "RUNNING", startedAt: new Date(), error: null },
+    });
+    if (claimed.count === 0) continue;
+
+    const cfg = configByEmployee.get(step.employeeId);
+    const files = run.actions
+      .filter((a) => a.kind === "file" && a.employeeId === step.employeeId)
+      .map((a) => {
+        const payload = a.payload as { path: string; purpose?: string };
+        return { path: payload.path, purpose: payload.purpose ?? "" };
+      });
+
+    await runCrewStepOnWorker({
+      runId,
+      brief: plan.brief,
+      projectName: run.project.name,
+      step: {
+        key: step.key,
+        name: step.name,
+        title: step.title,
+        focus: step.focus,
+        task: step.task,
+        description: step.description,
+        note: step.note,
+        employeeId: step.employeeId,
+        files,
+      },
+      agent: {
+        employeeId: step.employeeId,
+        name: step.name,
+        model: cfg?.model || "minimaxai/minimax-m3.1-flash",
+        systemPrompt: cfg?.systemPrompt || "",
+        enabled: cfg?.enabled ?? false,
+      },
+      files: run.actions
+        .filter((a) => a.kind === "file")
+        .map((a) => (a.payload as { path: string }).path),
+    });
+
+    return { ok: true, dispatched: step.key };
+  }
+
+  await finalizeCrewRun(runId, "DONE");
+  return { ok: true, finalized: true };
+}
+
+/** Tutup crew run sekali saja, apa pun yang memanggilnya. */
+export async function finalizeCrewRun(runId: string, forcedStatus?: "DONE" | "FAILED", error?: string) {
+  const run = await prisma.crewRun.findUnique({
+    where: { id: runId },
+    include: { project: { select: { id: true } }, actions: { orderBy: { seq: "asc" } } },
+  });
+  if (!run || run.status !== "RUNNING") return { ok: true, skipped: true };
+
+  const done = run.actions.filter((a) => a.status === "DONE").length;
+  const failed = run.actions.filter((a) => a.status === "ERROR").length;
+  const failedSteps = await prisma.crewRunStep.count({ where: { runId, status: "FAILED" } });
+  const status: "DONE" | "FAILED" = forcedStatus === "FAILED" || failed > 0 || failedSteps > 0 ? "FAILED" : "DONE";
+  const seconds = Math.round((Date.now() - (run.startedAt?.getTime() || Date.now())) / 1000);
+  const files = await listProjectFiles(run.projectId);
+
+  if (status === "FAILED") {
+    await prisma.crewRunAction.updateMany({
+      where: { runId, status: "PENDING" },
+      data: {
+        status: "SKIPPED",
+        error: error || "Crew dihentikan karena step sebelumnya gagal.",
+        finishedAt: new Date(),
+      },
+    });
+  }
+
+  const summary = error
+    ? `Crew OpenCode terhenti: ${error} (${seconds} detik)`
+    : `Crew OpenCode ${status === "DONE" ? "selesai" : "terhenti"} dalam ${seconds} detik: ${done} aksi, ${failed} gagal, ${files.length} file di proyek.`;
+
+  const claimed = await prisma.crewRun.updateMany({
+    where: { id: runId, status: "RUNNING" },
+    data: { status, summary, finishedAt: new Date() },
+  });
+  if (claimed.count === 0) return { ok: true, skipped: true };
+
+  const plan = run.plan as unknown as CrewPlan;
+  const conversation = await prisma.conversation.findFirst({
+    where: { projectId: run.projectId, type: "PROJECT" }, select: { id: true },
+  });
+  if (conversation) {
+    await prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        body: `${status === "DONE" ? "Crew selesai" : "Crew terhenti"}: ${summary}\n\nKaryawan berjalan berurutan lewat OpenCode subagent: ${plan.steps.map((s) => s.name).join(" → ")}.`,
+        generatedByAi: true,
+      },
+    });
+  }
+
+  return { ok: true, status, done, failed };
 }
 
 /** Satu klik approve: pilih engine berdasarkan CREW_ENGINE. */

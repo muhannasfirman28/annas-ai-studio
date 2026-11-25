@@ -18,8 +18,9 @@ const WORKER_TOKEN = process.env.CREW_WORKER_TOKEN || "";
 const PROVIDER_ID = process.env.OPENCODE_PROVIDER_ID || "nvidia";
 const MODEL_ID = process.env.OPENCODE_MODEL_ID || "minimaxai/minimax-m3.1-flash";
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || "/tmp/crew";
-const STEP_TIMEOUT_MS = Number(process.env.STEP_TIMEOUT_MS || 130_000);
-const DEADLINE_MS = Number(process.env.CREW_DEADLINE_MS || 480_000);
+// Satu invoke worker hanya mengerjakan satu karyawan. Beri margin sebelum batas
+// 5 menit Fly trial, dengan retry/auto-start jika mesin mati di antara step.
+const STEP_TIMEOUT_MS = Number(process.env.STEP_TIMEOUT_MS || 240_000);
 
 const ALLOWED_DIRS = ["app/", "components/", "data/", "lib/", "public/"];
 const ALLOWED_ROOT_FILES = new Set([
@@ -28,6 +29,7 @@ const ALLOWED_ROOT_FILES = new Set([
 ]);
 
 let activeRunId = null;
+let activeStepKey = null;
 let cancelRequestedRunId = null;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -198,15 +200,15 @@ function buildStepPrompt(step, agent, brief) {
   ].join("\n");
 }
 
-async function createCoordinatorSession(runId, workspace) {
+async function createCoordinatorSession(runId, workspace, stepKey = "") {
   const res = await opencodeFetch("/api/session", {
     method: "POST",
     body: JSON.stringify({
-      title: `Crew ${runId}`,
+      title: stepKey ? `Crew ${runId} — ${stepKey}` : `Crew ${runId}`,
       location: { directory: workspace },
       agent: "crew-coordinator",
       model: { providerID: PROVIDER_ID, id: MODEL_ID },
-      metadata: { runId, source: "annas-ai-studio" },
+      metadata: { runId, stepKey, source: "annas-ai-studio" },
     }),
   });
   const text = await res.text();
@@ -316,7 +318,7 @@ async function commitChanges(runId, dir, previous, employeeId) {
 async function runCrew(payload) {
   const runId = safeRunId(payload.runId);
   const started = Date.now();
-  const deadline = started + DEADLINE_MS;
+  const deadline = started + Number(process.env.CREW_DEADLINE_MS || 900_000);
   let workspace = null;
   let failed = false;
 
@@ -383,6 +385,71 @@ async function runCrew(payload) {
   }
 }
 
+/**
+ * Jalankan SATU karyawan per invoke. Studio yang mengirim step berikutnya
+ * setelah callback diterima, sehingga mesin boleh restart di antara step.
+ */
+async function runStep(payload) {
+  const runId = safeRunId(payload.runId);
+  const step = payload.step;
+  if (!step || typeof step.key !== "string" || typeof step.employeeId !== "string") {
+    throw new Error("Payload step tidak valid.");
+  }
+
+  const startedAt = Date.now();
+  let workspace = null;
+  let coordinatorId = null;
+  let childId = null;
+  let result = null;
+
+  try {
+    if (cancelRequestedRunId === runId) throw new Error("Crew dibatalkan.");
+
+    workspace = await prepareWorkspace(runId, payload.files || []);
+    const hashes = await hashWorkspace(workspace, await workspaceFiles(workspace));
+    coordinatorId = await createCoordinatorSession(runId, workspace, step.key);
+
+    const agent = payload.agent;
+    let note = step.note || `${step.name}: ${step.task}`;
+    let files = [];
+
+    if (agent?.enabled === false) {
+      note = `${note}\n(Caryawan dinonaktifkan di Settings; file memakai template Studio.)`;
+    } else {
+      const prompted = await promptStep(runId, coordinatorId, step, agent, payload.brief);
+      note = prompted.note;
+      childId = prompted.childId;
+      files = await commitChanges(runId, workspace, hashes, step.employeeId);
+    }
+
+    result = {
+      type: "step", stepKey: step.key, status: "DONE", note,
+      files,
+      sessionId: childId || coordinatorId,
+      parentId: childId ? coordinatorId : undefined,
+      model: agent?.model || `${PROVIDER_ID}/${MODEL_ID}`,
+      durationMs: Date.now() - startedAt,
+    };
+    console.log(`[run ${runId}] ${step.key} selesai (${Date.now() - startedAt} ms, ${files.length} file)`);
+  } catch (e) {
+    const message = (e instanceof Error ? e.message : String(e)).slice(0, 500);
+    result = {
+      type: "step", stepKey: step.key, status: "FAILED", error: message,
+      sessionId: coordinatorId || undefined,
+      durationMs: Date.now() - startedAt,
+    };
+    console.error(`[run ${runId}] ${step.key} gagal: ${message}`);
+  } finally {
+    if (workspace) await rm(workspace, { recursive: true, force: true }).catch(() => {});
+    // Clear dulu supaya callback yang memicu step berikutnya tidak kena 409.
+    if (activeRunId === runId) activeRunId = null;
+    if (activeStepKey === step.key) activeStepKey = null;
+    if (cancelRequestedRunId === runId) cancelRequestedRunId = null;
+  }
+
+  if (result) await callback(runId, result);
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
@@ -394,11 +461,39 @@ const server = http.createServer(async (req, res) => {
     } catch { /* mati */ }
     return send(res, 200, {
       ok: true, opencodeOk, opencode: OPENCODE_BASE,
-      provider: PROVIDER_ID, model: MODEL_ID, activeRunId,
+      provider: PROVIDER_ID, model: MODEL_ID, activeRunId, activeStepKey,
       callbackConfigured: !!CALLBACK_BASE, workerTokenConfigured: !!WORKER_TOKEN,
     });
   }
 
+  const stepMatch = /^\/runs\/([^/]+)\/step$/.exec(url.pathname);
+  if (req.method === "POST" && stepMatch) {
+    if (!bearer(req, WORKER_TOKEN)) return send(res, 401, { error: "Token worker tidak valid." });
+    let runId;
+    try { runId = safeRunId(decodeURIComponent(stepMatch[1])); }
+    catch (e) { return send(res, 400, { error: e instanceof Error ? e.message : String(e) }); }
+
+    let raw = "";
+    for await (const chunk of req) {
+      raw += chunk;
+      if (raw.length > 2_000_000) return send(res, 413, { error: "Payload terlalu besar." });
+    }
+    const payload = tryJson(raw || "{}");
+    if (!payload?.brief || !payload?.step || typeof payload.step.key !== "string") {
+      return send(res, 400, { error: "Body step tidak valid." });
+    }
+    if (activeRunId) return send(res, 409, { error: `Run ${activeRunId} masih berjalan.`, activeRunId });
+    if (!CALLBACK_BASE || !CALLBACK_TOKEN) return send(res, 500, { error: "STUDIO_CALLBACK_URL / CREW_CALLBACK_TOKEN belum diatur." });
+
+    activeRunId = runId;
+    activeStepKey = payload.step.key;
+    res.writeHead(202, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ accepted: true, runId, stepKey: payload.step.key }));
+    void runStep({ ...payload, runId });
+    return;
+  }
+
+  // Endpoint lama dipertahankan untuk rollback, tapi tidak dipakai engine step-by-step.
   const startMatch = /^\/runs\/([^/]+)\/start$/.exec(url.pathname);
   if (req.method === "POST" && startMatch) {
     if (!bearer(req, WORKER_TOKEN)) return send(res, 401, { error: "Token worker tidak valid." });
