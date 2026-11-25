@@ -1,7 +1,9 @@
 export function llmConfigured() { return !!process.env.OPENAI_API_KEY; }
 
 /** Panggil endpoint chat-completions yang kompatibel dengan OpenAI. Melempar error jelas jika belum dikonfigurasi. */
-export async function chatCompletion(opts: { model: string; system: string; temperature?: number; provider?: string; messages: { role: "user" | "assistant"; content: string }[] }) {
+export async function chatCompletion(opts: { model: string; system: string; temperature?: number; provider?: string; timeoutMs?: number; attempts?: number; messages: { role: "user" | "assistant"; content: string }[] }) {
+  const timeoutMs = opts.timeoutMs ?? 60000;
+  const maxAttempts = Math.max(1, opts.attempts ?? 2);
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new Error("OPENAI_API_KEY belum diatur di environment. Tambahkan di file .env lalu restart server.");
   const base = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
@@ -23,13 +25,13 @@ export async function chatCompletion(opts: { model: string; system: string; temp
     };
     if (localBridge && opts.provider) body.provider = opts.provider;
 
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
         const res = await fetch(`${base}/chat/completions`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
           body: JSON.stringify(body),
-          signal: AbortSignal.timeout(60000),
+          signal: AbortSignal.timeout(timeoutMs),
         });
         if (res.ok) {
           const data = await res.json();

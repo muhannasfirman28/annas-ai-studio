@@ -107,11 +107,12 @@ function extractJson(text: string): unknown | null {
   try { return JSON.parse(cleaned.slice(start, end + 1)); } catch { return null; }
 }
 
-async function llmAnswer(cfg: any, system: string, prompt: string): Promise<string | null> {
-  if (!llmConfigured() || !cfg?.enabled) return null;
+async function llmAnswer(cfg: any, system: string, prompt: string, deadline = 0): Promise<string | null> {
+  if (!llmConfigured() || !cfg?.enabled || (deadline && Date.now() > deadline)) return null;
   try {
     const text = await chatCompletion({
       provider: cfg.provider, model: cfg.model, system, temperature: cfg.temperature ?? 0.4,
+      timeoutMs: 20000, attempts: 1,
       messages: [{ role: "user", content: prompt }],
     });
     return text?.trim() || null;
@@ -198,6 +199,8 @@ export async function executeCrewRun(input: { runId: string; user: SessionUser }
   const tasksByTitle = new Map<string, { id: string; code: string }>();
   let done = 0; let failed = 0; let lastError = "";
   const started = Date.now();
+  // Sisakan waktu untuk finalisasi DB meski provider LLM lambat: setelah ini semua file pakai template.
+  const deadline = started + 240_000;
 
   try {
     for (const step of plan.steps) {
@@ -215,8 +218,8 @@ export async function executeCrewRun(input: { runId: string; user: SessionUser }
 
       // Satu panggilan LLM per karyawan: menghasilkan catatan + semua file bagiannya.
       const generated = await llmAnswer(cfg,
-        `${cfg?.systemPrompt ?? ""}\nKamu sedang mengerjakan SATU tahap proyek. Balas HANYA JSON valid tanpa markdown dan tanpa penjelasan: {"note":"catatan deliverable maksimal 1200 karakter","files":[{"path":"...","content":"isi file lengkap"}]}. Gunakan数组 hanya untuk files. Gunakan array hanya untuk files. Escape newline sebagai \\n. Jangan memakai awalan TOOL:.`,
-        `Brief website:\n${plan.brief.slice(0, 3000)}\n\nPeranmu: ${step.title} — ${step.focus}.\nTugasmu: ${step.task}.\nFile yang harus dibuat (path → tujuan):\n${specs.map((s) => `- ${s.path}: ${s.purpose}`).join("\n") || "- tidak ada file"}\nFile dari karyawan sebelumnya: ${context}.\nTulis catatan dan seluruh file yang menjadi bagianmu. Kode TypeScript/TSX harus valid dan bisa di-build. Teks UI dalam Bahasa Indonesia.`);
+        `${cfg?.systemPrompt ?? ""}\nKamu sedang mengerjakan SATU tahap proyek. Balas HANYA JSON valid tanpa markdown dan tanpa penjelasan: {"note":"catatan deliverable maksimal 1200 karakter","files":[{"path":"...","content":"isi file lengkap"}]}. Gunakan array hanya untuk files. Escape newline sebagai \\n. Jangan memakai awalan TOOL:.`,
+        `Brief website:\n${plan.brief.slice(0, 3000)}\n\nPeranmu: ${step.title} — ${step.focus}.\nTugasmu: ${step.task}.\nFile yang harus dibuat (path → tujuan):\n${specs.map((s) => `- ${s.path}: ${s.purpose}`).join("\n") || "- tidak ada file"}\nFile dari karyawan sebelumnya: ${context}.\nTulis catatan dan seluruh file yang menjadi bagianmu. Kode TypeScript/TSX harus valid dan bisa di-build. Teks UI dalam Bahasa Indonesia.`, deadline);
       const parsed = generated ? extractJson(generated) as { note?: unknown; files?: unknown } | null : null;
       if (typeof parsed?.note === "string" && parsed.note.length > 10) generatedNote = parsed.note;
       if (Array.isArray(parsed?.files)) {
@@ -293,12 +296,12 @@ export async function executeCrewRun(input: { runId: string; user: SessionUser }
 export async function crewStatus(runId: string) {
   const run = await prisma.crewRun.findUnique({
     where: { id: runId },
-    include: { actions: { orderBy: { seq: "asc" }, select: { id: true, seq: true, kind: true, target: true, employeeId: true, status: true, error: true } } },
+    include: { actions: { orderBy: { seq: "asc" }, select: { id: true, seq: true, kind: true, target: true, employeeId: true, status: true, error: true, finishedAt: true } } },
   });
   if (!run) throw new Error("Crew run tidak ditemukan.");
   return {
     id: run.id, status: run.status, summary: run.summary, plan: run.plan,
     startedAt: run.startedAt?.toISOString() ?? null, finishedAt: run.finishedAt?.toISOString() ?? null,
-    actions: run.actions.map((a) => ({ ...a, error: a.error ?? null })),
+    actions: run.actions.map((a) => ({ ...a, error: a.error ?? null, finishedAt: a.finishedAt?.toISOString() ?? null })),
   };
 }
