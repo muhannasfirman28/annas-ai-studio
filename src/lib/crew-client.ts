@@ -78,7 +78,9 @@ export async function runCrewStepOnWorker(payload: CrewWorkerStepPayload) {
   }
 
   let last = "";
-  for (let attempt = 0; attempt < 3; attempt++) {
+  const backoff = [0, 2_000, 4_000, 8_000];
+  for (let attempt = 0; attempt < backoff.length; attempt++) {
+    if (backoff[attempt]) await new Promise((r) => setTimeout(r, backoff[attempt]));
     try {
       const res = await fetch(`${base}/runs/${encodeURIComponent(payload.runId)}/step`, {
         method: "POST",
@@ -87,7 +89,7 @@ export async function runCrewStepOnWorker(payload: CrewWorkerStepPayload) {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(20_000),
         cache: "no-store",
       });
       const text = await res.text();
@@ -99,15 +101,10 @@ export async function runCrewStepOnWorker(payload: CrewWorkerStepPayload) {
         }
       }
       last = `${res.status}: ${text.slice(0, 300)}`;
-      if (res.status === 409) {
-        // Worker masih menyelesaikan step sebelumnya; coba lagi sebentar.
-        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
-        continue;
-      }
+      if (res.status === 409) continue;
     } catch (e) {
       last = (e instanceof Error ? e.message : String(e)).slice(0, 300);
     }
-    await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
   }
 
   throw new Error(`Crew Worker menolak step ${payload.step.key}: ${last}`);

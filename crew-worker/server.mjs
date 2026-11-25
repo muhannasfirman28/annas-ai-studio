@@ -90,13 +90,13 @@ async function studioFetch(urlPath, init = {}) {
   });
 }
 
-async function callback(runId, body) {
+async function callback(runId, body, timeoutMs = 60_000) {
   let last = "";
   const payload = JSON.stringify(Object.fromEntries(Object.entries(body).filter(([, v]) => v !== null && v !== undefined)));
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const res = await studioFetch(`/${encodeURIComponent(runId)}/callback`, {
-        method: "POST", body: payload,
+        method: "POST", body: payload, signal: AbortSignal.timeout(timeoutMs),
       });
       if (res.ok) return;
       last = `${res.status}: ${(await res.text()).slice(0, 200)}`;
@@ -466,6 +466,25 @@ async function runStep(payload) {
 
   if (result) await callback(runId, result);
 }
+
+// Fly trial mengirim SIGINT setiap 5 menit. Beri kabar Studio supaya step
+// diulang segera, bukan menunggu stale timeout 6 menit.
+let shuttingDown = false;
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  if (activeRunId && activeStepKey) {
+    console.error(`[worker] ${signal} diterima saat ${activeStepKey}; mengirim callback FAILED.`);
+    await callback(activeRunId, {
+      type: "step", stepKey: activeStepKey, status: "FAILED",
+      error: `Worker dihentikan Fly trial (${signal}) sebelum ${activeStepKey} selesai.`,
+      durationMs: 0,
+    }, 8_000);
+  }
+  process.exit(0);
+}
+process.on("SIGINT", () => void shutdown("SIGINT"));
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
