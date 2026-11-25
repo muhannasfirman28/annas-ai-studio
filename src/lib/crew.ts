@@ -361,7 +361,7 @@ export async function dispatchNextStep(runId: string) {
 
     if (row?.status === "FAILED") {
       const retryable = /timeout|fetch failed|worker dihentikan|gagal mengambil file|gagal menyimpan file|subagent opencode/i.test(row.error || "");
-      if (retryable && (row.attempts || 0) < 3) {
+      if (retryable && (row.attempts || 0) < 5) {
         await prisma.crewRunStep.updateMany({
           where: { runId, stepKey: step.key, status: "FAILED" },
           data: { status: "PENDING", error: null, finishedAt: null },

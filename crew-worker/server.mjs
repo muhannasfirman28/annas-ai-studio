@@ -20,7 +20,7 @@ const MODEL_ID = process.env.OPENCODE_MODEL_ID || "minimaxai/minimax-m3.1-flash"
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || "/tmp/crew";
 // Satu invoke worker hanya mengerjakan satu karyawan. Beri margin sebelum batas
 // 5 menit Fly trial, dengan retry/auto-start jika mesin mati di antara step.
-const STEP_TIMEOUT_MS = Number(process.env.STEP_TIMEOUT_MS || 240_000);
+const STEP_TIMEOUT_MS = Number(process.env.STEP_TIMEOUT_MS || 180_000);
 
 const ALLOWED_DIRS = ["app/", "components/", "data/", "lib/", "public/"];
 const ALLOWED_ROOT_FILES = new Set([
@@ -88,6 +88,19 @@ async function studioFetch(urlPath, init = {}) {
     },
     signal: init.signal || AbortSignal.timeout(60_000),
   });
+}
+
+async function studioFetchRetry(urlPath, init = {}) {
+  let last;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await studioFetch(urlPath, init);
+    } catch (e) {
+      last = e;
+      if (attempt < 2) await sleep(1000 * (attempt + 1));
+    }
+  }
+  throw last;
 }
 
 async function callback(runId, body, timeoutMs = 60_000) {
@@ -273,7 +286,7 @@ async function prepareWorkspace(runId, manifest) {
   await rm(dir, { recursive: true, force: true });
   await mkdir(dir, { recursive: true });
 
-  const res = await studioFetch(`/${encodeURIComponent(runId)}/files`, { signal: AbortSignal.timeout(30_000) });
+  const res = await studioFetchRetry(`/${encodeURIComponent(runId)}/files`, { signal: AbortSignal.timeout(30_000) });
   if (!res.ok) throw new Error(`Gagal mengambil file proyek (${res.status}): ${(await res.text()).slice(0, 300)}`);
   const data = await res.json();
   const files = Array.isArray(data?.files) ? data.files : [];
@@ -322,7 +335,7 @@ async function commitChanges(runId, dir, previous, employeeId) {
     changed.push({ path: file, content: await readFile(path.join(dir, file), "utf8"), employeeId });
   }
   if (!changed.length) return [];
-  const res = await studioFetch(`/${encodeURIComponent(runId)}/files`, {
+  const res = await studioFetchRetry(`/${encodeURIComponent(runId)}/files`, {
     method: "POST", body: JSON.stringify({ files: changed }),
   });
   if (!res.ok) throw new Error(`Gagal menyimpan file ke Studio (${res.status}): ${(await res.text()).slice(0, 300)}`);
@@ -450,8 +463,9 @@ async function runStep(payload) {
     console.log(`[run ${runId}] ${step.key} selesai (${Date.now() - startedAt} ms, ${files.length} file)`);
   } catch (e) {
     const message = (e instanceof Error ? e.message : String(e)).slice(0, 500);
+    const cause = e instanceof Error && e.cause ? ` (${String(e.cause).slice(0, 200)})` : "";
     result = {
-      type: "step", stepKey: step.key, status: "FAILED", error: message,
+      type: "step", stepKey: step.key, status: "FAILED", error: `${message}${cause}`.slice(0, 500),
       sessionId: coordinatorId || undefined,
       durationMs: Date.now() - startedAt,
     };
