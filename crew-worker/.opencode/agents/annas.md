@@ -1,7 +1,7 @@
 ---
 description: Founder & CEO — menetapkan scope, prioritas, dan kriteria selesai
 mode: subagent
-model: nvidia/minimaxai/minimax-m3.1-flash
+model: nvidia/meta/llama-3.2-11b-vision-instruct
 steps: 10
 permissions:
   - action: "*"

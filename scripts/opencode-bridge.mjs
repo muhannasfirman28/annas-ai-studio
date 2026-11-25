@@ -18,7 +18,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 const PORT = Number(process.env.BRIDGE_PORT || 4101);
-const MODEL_ID = process.env.OPENCODE_MODEL_ID || "minimaxai/minimax-m3.1-flash";
+const MODEL_ID = process.env.OPENCODE_MODEL_ID || "meta/llama-3.2-11b-vision-instruct";
 const PROVIDER_ID = process.env.OPENCODE_PROVIDER_ID || "nvidia";
 const KNOWN_PROVIDERS = new Set(
   (process.env.OPENCODE_PROVIDERS || "nvidia,opencode,openai,anthropic,google,github-copilot,replicate,vercel")

@@ -52,7 +52,7 @@ npm run ai:bridge       # http://127.0.0.1:4101/v1
 
 `.env` sudah diarahkan ke jembatan tersebut (`OPENAI_BASE_URL=http://127.0.0.1:4101/v1`, `OPENAI_API_KEY=local-opencode-bridge`). Variabel opsional: `OPENCODE_SERVER_URL`, `OPENCODE_SERVICE_PASSWORD`, `OPENCODE_MODEL_ID`, `OPENCODE_PROVIDER_ID`, `OPENCODE_PROVIDERS`, `BRIDGE_PORT`.
 
-**Provider & model per agent:** kolom Provider dan Model di Settings → AI Model dikirim ke jembatan dan diteruskan ke OpenCode. Isi Provider dengan ID provider OpenCode (mis. `nvidia`) dan Model dengan ID model OpenCode (mis. `minimaxai/minimax-m3.1-flash`). Boleh juga menulis model sebagai `nvidia/minimaxai/minimax-m3.1-flash` tanpa mengisi Provider. Kedelapan agent seed sudah memakai `nvidia` + `minimaxai/minimax-m3.1-flash`. Ringkasan AI memakai `OPENAI_PROVIDER` + `OPENAI_MODEL` dari `.env`.
+**Provider & model per agent:** kolom Provider dan Model di Settings → AI Model dikirim ke jembatan dan diteruskan ke OpenCode. Isi Provider dengan ID provider OpenCode (mis. `nvidia`) dan Model dengan ID model OpenCode (mis. `meta/llama-3.2-11b-vision-instruct`). Boleh juga menulis model sebagai `nvidia/meta/llama-3.2-11b-vision-instruct` tanpa mengisi Provider. Kedelapan agent seed memakai `nvidia` + `meta/llama-3.2-11b-vision-instruct`. Model `minimaxai/minimax-m3.1-flash` suka menggantung pada prompt panjang, jadi tidak dipakai untuk crew. Ringkasan AI memakai `OPENAI_PROVIDER` + `OPENAI_MODEL` dari `.env`.
 
 Catatan: endpoint `generate/text` OpenCode hanya menerima `prompt` dan `model`, jadi `temperature` diterjemahkan menjadi instruksi gaya di prompt (bukan sampling server), dan jembatan tidak melakukan streaming.
 

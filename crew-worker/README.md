@@ -22,7 +22,7 @@ Worker Fly.io yang menjalankan delapan karyawan Annas AI Studio sebagai **subage
 | `STUDIO_CALLBACK_URL` | Base URL internal Studio, mis. `https://annas-ai-studio.vercel.app/api/internal/crew/runs`. |
 | `OPENCODE_SERVER_PASSWORD` | Password server OpenCode di dalam container. |
 | `OPENCODE_SERVICE_PASSWORD` | Password yang dipakai worker untuk memanggil server OpenCode (nilainya sama). |
-| `OPENCODE_PROVIDER_ID` / `OPENCODE_MODEL_ID` | Provider/model OpenCode (default `nvidia` / `minimaxai/minimax-m3.1-flash`). |
+| `OPENCODE_PROVIDER_ID` / `OPENCODE_MODEL_ID` | Provider/model OpenCode (default `nvidia` / `meta/llama-3.2-11b-vision-instruct`). |
 
 Di sisi Studio: `CREW_ENGINE=opencode`, `CREW_WORKER_URL`, `CREW_WORKER_TOKEN`, `CREW_CALLBACK_TOKEN`.
 

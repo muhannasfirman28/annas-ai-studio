@@ -1,7 +1,7 @@
 ---
 description: COO — menyusun WBS, urutan kerja, dan README proyek
 mode: subagent
-model: nvidia/minimaxai/minimax-m3.1-flash
+model: nvidia/meta/llama-3.2-11b-vision-instruct
 steps: 12
 permissions:
   - action: "*"

@@ -16,7 +16,7 @@ const CALLBACK_BASE = (process.env.STUDIO_CALLBACK_URL || "").replace(/\/$/, "")
 const CALLBACK_TOKEN = process.env.CREW_CALLBACK_TOKEN || "";
 const WORKER_TOKEN = process.env.CREW_WORKER_TOKEN || "";
 const PROVIDER_ID = process.env.OPENCODE_PROVIDER_ID || "nvidia";
-const MODEL_ID = process.env.OPENCODE_MODEL_ID || "minimaxai/minimax-m3.1-flash";
+const MODEL_ID = process.env.OPENCODE_MODEL_ID || "meta/llama-3.2-11b-vision-instruct";
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || "/tmp/crew";
 // Satu invoke worker hanya mengerjakan satu karyawan. Beri margin sebelum batas
 // 5 menit Fly trial, dengan retry/auto-start jika mesin mati di antara step.

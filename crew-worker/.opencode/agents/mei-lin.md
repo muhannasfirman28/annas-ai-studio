@@ -1,7 +1,7 @@
 ---
 description: UI/UX Designer — design system hitam/putih/dark navy dan aset visual
 mode: subagent
-model: nvidia/minimaxai/minimax-m3.1-flash
+model: nvidia/meta/llama-3.2-11b-vision-instruct
 steps: 14
 permissions:
   - action: "*"

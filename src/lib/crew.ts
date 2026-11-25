@@ -422,7 +422,7 @@ export async function dispatchNextStep(runId: string) {
       agent: {
         employeeId: step.employeeId,
         name: step.name,
-        model: cfg?.model || "minimaxai/minimax-m3.1-flash",
+        model: cfg?.model || "meta/llama-3.2-11b-vision-instruct",
         systemPrompt: cfg?.systemPrompt || "",
         enabled: cfg?.enabled ?? false,
       },

@@ -1,7 +1,7 @@
 ---
 description: CTO — menentukan arsitektur Next.js App Router dan konfigurasi build
 mode: subagent
-model: nvidia/minimaxai/minimax-m3.1-flash
+model: nvidia/meta/llama-3.2-11b-vision-instruct
 steps: 14
 permissions:
   - action: "*"

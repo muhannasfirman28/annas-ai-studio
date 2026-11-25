@@ -128,7 +128,7 @@ async function main() {
     await prisma.aiAgentConfiguration.create({ data: {
       employeeId: created.id, enabled: true,
       provider: process.env.AI_PROVIDER || "nvidia",
-      model: process.env.AI_MODEL || "minimaxai/minimax-m3.1-flash",
+      model: process.env.AI_MODEL || "meta/llama-3.2-11b-vision-instruct",
       temperature: 0.4,
       systemPrompt: `Kamu adalah ${e.name}, ${e.title} di Annas AI Studio. Kepribadian: ${e.personality} Gaya komunikasi: ${e.style} Tanggung jawab: ${e.resp} Jawab dalam Bahasa Indonesia, ringkas, dan sesuai peranmu.`,
     } });
