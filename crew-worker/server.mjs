@@ -139,23 +139,17 @@ function parseList(payload) {
 }
 
 async function waitForIdle(sessionId, sinceMs) {
-  try {
-    const res = await opencodeFetch(`/api/experimental/session/${encodeURIComponent(sessionId)}/wait`, {
-      signal: AbortSignal.timeout(STEP_TIMEOUT_MS),
-    });
-    if (res.ok) return;
-  } catch {
-    // Endpoint experimental bisa berubah; pakai fallback polling message idle.
-  }
-
+  // Endpoint /wait bisa mengembalikan 200 sebelum run dimulai, jadi tetap poll
+  // sampai session benar-benar punya timestamp idle setelah prompt dikirim.
   const deadline = Date.now() + STEP_TIMEOUT_MS;
   while (Date.now() < deadline) {
     try {
-      const res = await opencodeFetch(`/api/session/${encodeURIComponent(sessionId)}/message?type=idle&order=desc&limit=1`);
+      const res = await opencodeFetch(`/api/session/${encodeURIComponent(sessionId)}`);
       if (res.ok) {
-        const item = parseList(await res.json())[0];
-        const created = item?.time?.created;
-        if (typeof created === "number" && created >= sinceMs) return;
+        const payload = await res.json();
+        const data = payload?.data || payload;
+        const idle = data?.time?.idle;
+        if (typeof idle === "number" && idle >= sinceMs) return;
       }
     } catch {
       // abaikan, lanjut polling
@@ -185,22 +179,21 @@ async function sessionNote(sessionId) {
   }
 }
 
-function buildPrompt(step, agent, brief) {
+function buildStepPrompt(step, agent, brief) {
   const files = step.files.map((f) => `- ${f.path}: ${f.purpose || "tanpa keterangan"}`).join("\n") || "- tidak ada file";
   const extra = agent?.systemPrompt ? `\n\nInstruksi tambahan dari Settings Studio:\n${agent.systemPrompt.slice(0, 2000)}` : "";
   return [
-    `Kamu adalah coordinator crew. Jalankan subagent @${step.key} untuk menyelesaikan SATU tahap ini.`,
+    `Kamu adalah ${step.name}, ${step.title}. Fokusmu: ${step.focus}.`,
     "",
     `Brief proyek:\n${brief.slice(0, 3000)}`,
     "",
-    `Peran: ${step.title} — ${step.focus}.`,
     `Tugas: ${step.task}.`,
     `Deskripsi: ${step.description}.`,
     "",
     `File yang harus dibuat/diperbarui di workspace ini dengan tool edit/write OpenCode:\n${files}`,
     "",
     "Sebelum menulis, baca file yang sudah ada bila relevan. Jangan hanya mengembalikan kode di chat — tulis benar-benar ke workspace. Kode TypeScript/TSX harus valid dan bisa di-build. Teks UI dalam Bahasa Indonesia.",
-    `Setelah subagent selesai, balas HANYA catatan deliverable maksimal 1200 karakter diawali "NOTE:". Jangan mengulang isi file.${extra}`,
+    `Setelah selesai, balas HANYA catatan deliverable maksimal 1200 karakter diawali "NOTE:". Jangan mengulang isi file.${extra}`,
   ].join("\n");
 }
 
@@ -218,31 +211,49 @@ async function createCoordinatorSession(runId, workspace) {
   const text = await res.text();
   if (!res.ok) throw new Error(`Gagal membuat session OpenCode (${res.status}): ${text.slice(0, 300)}`);
   const data = tryJson(text);
-  const id = data?.id || data?.session?.id;
+  const id = data?.id || data?.session?.id || data?.data?.id;
   if (!id) throw new Error("Respons session OpenCode tidak mengandung id.");
   return String(id);
 }
 
-async function promptStep(runId, sessionId, step, agent, brief) {
+async function createChildSession(parentId, step) {
+  const res = await opencodeFetch("/api/session", {
+    method: "POST",
+    body: JSON.stringify({
+      parentID: parentId,
+      agent: step.key,
+      title: `Crew ${step.key}`,
+      model: { providerID: PROVIDER_ID, id: MODEL_ID },
+      metadata: { stepKey: step.key, source: "annas-ai-studio" },
+    }),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Gagal membuat child session ${step.key} (${res.status}): ${text.slice(0, 300)}`);
+  const data = tryJson(text);
+  const id = data?.id || data?.session?.id || data?.data?.id;
+  if (!id) throw new Error(`Respons child session ${step.key} tidak mengandung id.`);
+  return String(id);
+}
+
+async function promptStep(runId, coordinatorId, step, agent, brief) {
   const startedAt = Date.now();
-  const res = await opencodeFetch(`/api/session/${encodeURIComponent(sessionId)}/prompt`, {
+  const childId = await createChildSession(coordinatorId, step);
+  const res = await opencodeFetch(`/api/session/${encodeURIComponent(childId)}/prompt`, {
     method: "POST",
     body: JSON.stringify({
       id: `crew-${runId}-${step.key}`.slice(0, 120),
-      text: buildPrompt(step, agent, brief),
-      agents: [{ name: step.key }],
-      metadata: { runId, stepKey: step.key },
+      text: buildStepPrompt(step, agent, brief),
+      metadata: { runId, stepKey: step.key, childId, parentId: coordinatorId },
     }),
   });
   if (!res.ok) throw new Error(`Gagal mengirim prompt ${step.key} (${res.status}): ${(await res.text()).slice(0, 300)}`);
-  await waitForIdle(sessionId, startedAt);
+  await waitForIdle(childId, startedAt);
 
-  const childId = await latestChildSession(sessionId);
-  const coordinatorNote = await sessionNote(sessionId);
-  const childNote = childId ? await sessionNote(childId) : "";
+  const childNote = await sessionNote(childId);
   return {
-    note: childNote || coordinatorNote || step.note || `${step.name}: ${step.task}`,
-    childId, coordinatorNote, childNote,
+    note: childNote || step.note || `${step.name}: ${step.task}`,
+    childId,
+    parentId: coordinatorId,
   };
 }
 
