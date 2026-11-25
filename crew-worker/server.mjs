@@ -143,7 +143,8 @@ function parseList(payload) {
 
 async function waitForIdle(sessionId, sinceMs) {
   // Endpoint /wait bisa mengembalikan 200 sebelum run dimulai, jadi tetap poll
-  // sampai session benar-benar punya timestamp idle setelah prompt dikirim.
+  // sampai session benar-benar idle. Fallback: NOTE dari assistant sudah berarti
+  // deliverable selesai walaupun timestamp idle belum terpasang.
   const deadline = Date.now() + STEP_TIMEOUT_MS;
   while (Date.now() < deadline) {
     try {
@@ -153,6 +154,8 @@ async function waitForIdle(sessionId, sinceMs) {
         const data = payload?.data || payload;
         const idle = data?.time?.idle;
         if (typeof idle === "number" && idle >= sinceMs) return;
+        if (data?.outcome === "succeeded") return;
+        if (await sessionNote(sessionId)) return;
       }
     } catch {
       // abaikan, lanjut polling
@@ -249,7 +252,13 @@ async function promptStep(runId, coordinatorId, step, agent, brief) {
     }),
   });
   if (!res.ok) throw new Error(`Gagal mengirim prompt ${step.key} (${res.status}): ${(await res.text()).slice(0, 300)}`);
-  await waitForIdle(childId, startedAt);
+  try {
+    await waitForIdle(childId, startedAt);
+  } catch (e) {
+    // OpenCode kadang selesai tetapi tidak sempat menulis time.idle sebelum
+    // worker menutup session. NOTE yang valid tetap dianggap selesai.
+    if (!(await sessionNote(childId))) throw e;
+  }
 
   const childNote = await sessionNote(childId);
   return {
@@ -270,7 +279,9 @@ async function prepareWorkspace(runId, manifest) {
   const files = Array.isArray(data?.files) ? data.files : [];
   for (const file of files) {
     const p = normalizeWorkerPath(file.path);
-    await writeFile(path.join(dir, p), String(file.content ?? ""), "utf8");
+    const abs = path.join(dir, p);
+    await mkdir(path.dirname(abs), { recursive: true });
+    await writeFile(abs, String(file.content ?? ""), "utf8");
   }
   return dir;
 }
@@ -279,14 +290,18 @@ async function workspaceFiles(dir) {
   const found = [];
   async function walk(current) {
     for (const entry of await readdir(current, { withFileTypes: true })) {
-      if (!entry.isFile()) continue;
       const abs = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        await walk(abs);
+        continue;
+      }
+      if (!entry.isFile()) continue;
       const rel = path.relative(dir, abs).split(path.sep).join("/");
       try { found.push(normalizeWorkerPath(rel)); } catch { /* file di luar allowlist diabaikan */ }
     }
   }
   await walk(dir);
-  return found.sort();
+  return [...new Set(found)].sort();
 }
 
 async function hashWorkspace(dir, files) {
@@ -406,7 +421,9 @@ async function runStep(payload) {
     if (cancelRequestedRunId === runId) throw new Error("Crew dibatalkan.");
 
     workspace = await prepareWorkspace(runId, payload.files || []);
-    const hashes = await hashWorkspace(workspace, await workspaceFiles(workspace));
+    const initialFiles = await workspaceFiles(workspace);
+    const hashes = await hashWorkspace(workspace, initialFiles);
+    console.log(`[run ${runId}] ${step.key} workspace: ${initialFiles.length} file`);
     coordinatorId = await createCoordinatorSession(runId, workspace, step.key);
 
     const agent = payload.agent;

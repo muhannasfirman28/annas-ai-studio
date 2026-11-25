@@ -350,7 +350,7 @@ export async function dispatchNextStep(runId: string) {
   const configByEmployee = new Map(configs.map((c) => [c.employeeId, c]));
   const stepRows = await prisma.crewRunStep.findMany({
     where: { runId },
-    select: { stepKey: true, status: true, startedAt: true, error: true },
+    select: { stepKey: true, status: true, startedAt: true, error: true, attempts: true },
   });
   const byKey = new Map(stepRows.map((s) => [s.stepKey, s]));
   const now = Date.now();
@@ -360,8 +360,17 @@ export async function dispatchNextStep(runId: string) {
     if (row?.status === "DONE") continue;
 
     if (row?.status === "FAILED") {
-      await finalizeCrewRun(runId, "FAILED", row.error || `Step ${step.name} gagal.`);
-      return { ok: true, finalized: true };
+      const retryable = /timeout|timeout menunggu|subagent opencode/i.test(row.error || "");
+      if (retryable && (row.attempts || 0) < 3) {
+        await prisma.crewRunStep.updateMany({
+          where: { runId, stepKey: step.key, status: "FAILED" },
+          data: { status: "PENDING", error: null, finishedAt: null },
+        });
+        row.status = "PENDING";
+      } else {
+        await finalizeCrewRun(runId, "FAILED", row.error || `Step ${step.name} gagal.`);
+        return { ok: true, finalized: true };
+      }
     }
 
     if (row?.status === "RUNNING") {
@@ -383,7 +392,7 @@ export async function dispatchNextStep(runId: string) {
 
     const claimed = await prisma.crewRunStep.updateMany({
       where: { runId, stepKey: step.key, status: "PENDING" },
-      data: { status: "RUNNING", startedAt: new Date(), error: null },
+      data: { status: "RUNNING", startedAt: new Date(), error: null, attempts: { increment: 1 } },
     });
     if (claimed.count === 0) continue;
 

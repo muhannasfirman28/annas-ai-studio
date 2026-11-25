@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { z } from "zod";
 import { runTool } from "@/lib/agent-tools";
-import { dispatchNextStep, finalizeCrewRun, type CrewPlan } from "@/lib/crew";
+import { dispatchNextStep, type CrewPlan } from "@/lib/crew";
 import { crewUserContext, unauthorized, verifyCrewCallback } from "@/lib/crew-internal";
 import { prisma } from "@/lib/prisma";
 import { listProjectFiles } from "@/lib/project-files";
@@ -99,7 +99,8 @@ export async function POST(req: NextRequest, ctx: Ctx) {
         });
       }
       after(async () => {
-        await finalizeCrewRun(runId, "FAILED", body.error || `Step ${step.name} gagal.`);
+        // dispatchNextStep yang memutuskan retry untuk timeout atau finalisasi gagal.
+        await dispatchNextStep(runId);
       });
       return NextResponse.json({ ok: true, stepKey: body.stepKey, status: "FAILED" });
     }

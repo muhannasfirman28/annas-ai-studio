@@ -290,6 +290,7 @@ model CrewRunStep {
   error      String?
   files      Json?
   durationMs Int?
+  attempts   Int       @default(0)
   startedAt  DateTime  @default(now())
   finishedAt DateTime?
 
