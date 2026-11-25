@@ -1,0 +1,435 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "client"
+  previewFeatures = ["queryCompiler"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  FOUNDER
+  EXECUTIVE
+  MANAGER
+  EMPLOYEE
+}
+
+enum Availability {
+  AVAILABLE
+  BUSY
+  AWAY
+  OFFLINE
+}
+
+enum TaskStatus {
+  BACKLOG
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  REVISION
+  COMPLETED
+  BLOCKED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+}
+
+enum ReportPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum NotificationType {
+  TASK_ASSIGNED
+  DEADLINE_CHANGED
+  TASK_COMPLETED
+  TASK_OVERDUE
+  NEW_COMMENT
+  NEW_REPORT
+  NEW_PROJECT
+  REVIEW_REQUESTED
+}
+
+enum ConversationType {
+  GENERAL
+  PROJECT
+  DIVISION
+}
+
+enum MessageKind {
+  MESSAGE
+  INSTRUCTION
+}
+
+// 1. users
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         UserRole @default(EMPLOYEE)
+  active       Boolean  @default(true)
+  employeeId   String?  @unique
+  employee     Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+  lastLoginAt  DateTime?
+
+  notifications Notification[]
+  comments      TaskComment[]
+  messages      Message[]
+  tasksCreated  Task[]         @relation("TaskCreator")
+
+  @@map("users")
+}
+
+// 3. departments
+model Department {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  color       String   @default("#2563eb")
+  description String?
+  employees   Employee[]
+  tasks       Task[]
+  conversations Conversation[]
+
+  @@map("departments")
+}
+
+// 4. roles (role & permissions)
+model Role {
+  id          String   @id @default(cuid())
+  key         UserRole @unique
+  name        String
+  description String?
+  permissions String[]
+
+  @@map("roles")
+}
+
+// 2. employees
+model Employee {
+  id                 String       @id @default(cuid())
+  name               String
+  title              String
+  departmentId       String
+  department         Department   @relation(fields: [departmentId], references: [id])
+  avatarColor        String       @default("#2563eb")
+  avatarUrl          String?
+  bio                String       @default("")
+  personality        String       @default("")
+  communicationStyle String       @default("")
+  responsibilities   String       @default("")
+  targets            String       @default("")
+  availability       Availability @default(AVAILABLE)
+  managerId          String?
+  manager            Employee?    @relation("Reporting", fields: [managerId], references: [id], onDelete: SetNull)
+  reports            Employee[]   @relation("Reporting")
+  collaborators      Employee[]   @relation("Collaboration")
+  collaboratorOf     Employee[]   @relation("Collaboration")
+  createdAt          DateTime     @default(now())
+
+  user        User?
+  skills      EmployeeSkill[]
+  assignments TaskAssignee[]
+  managedProjects Project[]
+  memberships ProjectMember[]
+  reportsFiled EmployeeReport[]
+  messages    Message[]
+  agentConfig AiAgentConfiguration?
+  activities  ActivityLog[]
+  taskLogs    TaskActivityLog[]
+
+  @@map("employees")
+}
+
+// 5. employee_skills
+model EmployeeSkill {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  name       String
+  level      Int      @default(80)
+
+  @@unique([employeeId, name])
+  @@map("employee_skills")
+}
+
+// 6. projects
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  description String        @default("")
+  status      ProjectStatus @default(PLANNING)
+  color       String        @default("#2563eb")
+  managerId   String?
+  manager     Employee?     @relation(fields: [managerId], references: [id], onDelete: SetNull)
+  startDate   DateTime      @default(now())
+  deadline    DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  members       ProjectMember[]
+  tasks         Task[]
+  milestones    Milestone[]
+  conversations Conversation[]
+  reports       EmployeeReport[]
+
+  @@map("projects")
+}
+
+// 7. project_members
+model ProjectMember {
+  id         String   @id @default(cuid())
+  projectId  String
+  employeeId String
+  role       String   @default("Member")
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, employeeId])
+  @@map("project_members")
+}
+
+model Milestone {
+  id        String    @id @default(cuid())
+  projectId String
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title     String
+  dueDate   DateTime?
+  done      Boolean   @default(false)
+
+  @@map("milestones")
+}
+
+// 8. tasks
+model Task {
+  id             String     @id @default(cuid())
+  code           String     @unique
+  title          String
+  description    String     @default("")
+  priority       Priority   @default(MEDIUM)
+  status         TaskStatus @default(TODO)
+  progress       Int        @default(0)
+  deadline       DateTime?
+  completedAt    DateTime?
+  departmentId   String?
+  department     Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  projectId      String?
+  project        Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdById    String?
+  createdBy      User?      @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  lastActivityAt DateTime   @default(now())
+
+  assignees   TaskAssignee[]
+  checklist   ChecklistItem[]
+  comments    TaskComment[]
+  attachments TaskAttachment[]
+  logs        TaskActivityLog[]
+
+  @@index([status])
+  @@index([deadline])
+  @@map("tasks")
+}
+
+// 9. task_assignees
+model TaskAssignee {
+  id         String   @id @default(cuid())
+  taskId     String
+  employeeId String
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, employeeId])
+  @@map("task_assignees")
+}
+
+model ChecklistItem {
+  id     String  @id @default(cuid())
+  taskId String
+  task   Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  text   String
+  done   Boolean @default(false)
+
+  @@map("task_checklist_items")
+}
+
+// 10. task_comments
+model TaskComment {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId  String?
+  author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@map("task_comments")
+}
+
+// 11. task_attachments
+model TaskAttachment {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  filename  String
+  storedAs  String
+  mimeType  String
+  size      Int
+  createdAt DateTime @default(now())
+
+  @@map("task_attachments")
+}
+
+// 12. task_activity_logs
+model TaskActivityLog {
+  id        String    @id @default(cuid())
+  taskId    String
+  task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actorName String
+  actorEmployeeId String?
+  actorEmployee   Employee? @relation(fields: [actorEmployeeId], references: [id], onDelete: SetNull)
+  action    String
+  detail    String    @default("")
+  createdAt DateTime  @default(now())
+
+  @@index([taskId])
+  @@map("task_activity_logs")
+}
+
+// 13. employee_reports
+model EmployeeReport {
+  id              String       @id @default(cuid())
+  employeeId      String
+  employee        Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  projectId       String?
+  project         Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  period          ReportPeriod @default(DAILY)
+  periodDate      DateTime     @default(now())
+  tasksWorked     String       @default("")
+  completedWork   String       @default("")
+  ongoingWork     String       @default("")
+  obstacles       String       @default("")
+  solutions       String       @default("")
+  recommendations String       @default("")
+  status          String       @default("On Track")
+  createdAt       DateTime     @default(now())
+
+  @@map("employee_reports")
+}
+
+// 14. notifications
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String           @default("")
+  link      String?
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+// 15. conversations
+model Conversation {
+  id           String           @id @default(cuid())
+  type         ConversationType @default(GENERAL)
+  title        String
+  projectId    String?
+  project      Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  departmentId String?
+  department   Department?      @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  createdAt    DateTime         @default(now())
+  messages     Message[]
+
+  @@map("conversations")
+}
+
+// 16. messages
+model Message {
+  id               String       @id @default(cuid())
+  conversationId   String
+  conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  authorUserId     String?
+  authorUser       User?        @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+  authorEmployeeId String?
+  authorEmployee   Employee?    @relation(fields: [authorEmployeeId], references: [id], onDelete: SetNull)
+  kind             MessageKind  @default(MESSAGE)
+  body             String
+  mentions         String[]
+  generatedByAi    Boolean      @default(false)
+  createdAt        DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+// 17. company_settings
+model CompanySettings {
+  id            Int      @id @default(1)
+  name          String
+  tagline       String
+  founder       String
+  industries    String[]
+  vision        String
+  missions      String[]
+  logoUrl       String?
+  primaryColor  String   @default("#0a1530")
+  secondaryColor String  @default("#2563eb")
+  accentColor   String   @default("#22d3ee")
+  notificationPrefs Json  @default("{}")
+  security      Json     @default("{}")
+  integrations  Json     @default("{}")
+  updatedAt     DateTime @updatedAt
+
+  @@map("company_settings")
+}
+
+// 18. ai_agent_configurations
+model AiAgentConfiguration {
+  id           String   @id @default(cuid())
+  employeeId   String   @unique
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  provider     String   @default("openai")
+  model        String   @default("gpt-4o-mini")
+  systemPrompt String   @default("")
+  temperature  Float    @default(0.4)
+  enabled      Boolean  @default(false)
+  updatedAt    DateTime @updatedAt
+
+  @@map("ai_agent_configurations")
+}
+
+// Log aktivitas umum untuk dashboard & riwayat karyawan
+model ActivityLog {
+  id         String    @id @default(cuid())
+  employeeId String?
+  employee   Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  type       String
+  message    String
+  link       String?
+  createdAt  DateTime  @default(now())
+
+  @@index([createdAt])
+  @@map("activity_logs")
+}
