@@ -9,34 +9,41 @@ export async function chatCompletion(opts: { model: string; system: string; temp
   // Jembatan OpenCode lokal memakai field `provider` untuk memilih provider.
   // API publik (Nvidia/OpenAI) menolak field tambahan ini, jadi hanya dikirim ke jembatan lokal.
   const localBridge = /(127\.0\.0\.1|localhost)/.test(base);
-  const body: Record<string, unknown> = {
-    model: opts.model,
-    temperature: opts.temperature ?? 0.4,
-    messages: [{ role: "system", content: opts.system }, ...opts.messages],
-  };
-  if (localBridge && opts.provider) body.provider = opts.provider;
+
+  // Model hosted bisa kehabisan kapasitas; siapkan model cadangan untuk API Nvidia.
+  const fallback = process.env.OPENAI_FALLBACK_MODEL || (base.includes("nvidia") ? "nvidia/nemotron-3.5-lightning-30b-a3b" : "");
+  const models = [opts.model, ...(fallback && fallback !== opts.model ? [fallback] : [])];
 
   let lastError = "";
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await fetch(`${base}/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(60000),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const text = data?.choices?.[0]?.message?.content;
-      if (!text) throw new Error("Respons LLM kosong.");
-      return String(text);
+  for (const model of models) {
+    const body: Record<string, unknown> = {
+      model,
+      temperature: opts.temperature ?? 0.4,
+      messages: [{ role: "system", content: opts.system }, ...opts.messages],
+    };
+    if (localBridge && opts.provider) body.provider = opts.provider;
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const res = await fetch(`${base}/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(60000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const text = data?.choices?.[0]?.message?.content;
+        if (!text) throw new Error("Respons LLM kosong.");
+        return String(text);
+      }
+      lastError = `Provider LLM mengembalikan ${res.status}: ${(await res.text()).slice(0, 200)}`;
+      // 429/529/5xx bersifat sementara — coba lagi, lalu pindah ke model cadangan.
+      if (res.status === 429 || res.status === 529 || res.status >= 500) {
+        await new Promise((r) => setTimeout(r, 900 * (attempt + 1)));
+        continue;
+      }
+      break; // error permanen (mis. 400/401/422)
     }
-    lastError = `Provider LLM mengembalikan ${res.status}: ${(await res.text()).slice(0, 200)}`;
-    // Model hosted bisa sibuk sesaat; coba ulang untuk 429/529/5xx.
-    if (res.status === 429 || res.status === 529 || res.status >= 500) {
-      await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
-      continue;
-    }
-    break;
   }
   throw new Error(lastError);
 }
