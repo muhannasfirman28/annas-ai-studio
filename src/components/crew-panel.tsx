@@ -45,6 +45,21 @@ export function CrewPanel({ projectId, write }: { projectId: string; write: bool
   }
   useEffect(() => { loadFiles(); }, [projectId]);
 
+  // Pulihkan status run terakhir setelah halaman dimuat ulang.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const list = await api<any>(`/api/projects/${projectId}/crew`);
+        const latest = list.runs?.[0];
+        if (!latest || !alive) return;
+        const s = await api<any>(`/api/projects/${projectId}/crew/${latest.id}`);
+        if (alive) { setRunId(s.id); setStatus(s); }
+      } catch { /* belum ada run */ }
+    })();
+    return () => { alive = false; };
+  }, [projectId]);
+
   useEffect(() => {
     if (!status || status.status !== "RUNNING" || !runId) return;
     const timer = setInterval(async () => {

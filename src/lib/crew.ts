@@ -61,6 +61,7 @@ const ROLES: RoleSpec[] = [
       { path: "components/hero.tsx", purpose: "Hero + CTA ke Projects dan Contact" },
       { path: "components/about.tsx", purpose: "Profil, pendidikan, konsentrasi" },
       { path: "components/projects.tsx", purpose: "Showcase project dengan data statis" },
+      { path: "components/contact.tsx", purpose: "Section Contact berisi link email, LinkedIn, dan GitHub tanpa form" },
     ],
   },
   {
