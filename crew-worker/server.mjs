@@ -90,10 +90,11 @@ async function studioFetch(urlPath, init = {}) {
 
 async function callback(runId, body) {
   let last = "";
+  const payload = JSON.stringify(Object.fromEntries(Object.entries(body).filter(([, v]) => v !== null && v !== undefined)));
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const res = await studioFetch(`/${encodeURIComponent(runId)}/callback`, {
-        method: "POST", body: JSON.stringify(body),
+        method: "POST", body: payload,
       });
       if (res.ok) return;
       last = `${res.status}: ${(await res.text()).slice(0, 200)}`;
@@ -241,7 +242,6 @@ async function promptStep(runId, coordinatorId, step, agent, brief) {
   const res = await opencodeFetch(`/api/session/${encodeURIComponent(childId)}/prompt`, {
     method: "POST",
     body: JSON.stringify({
-      id: `crew-${runId}-${step.key}`.slice(0, 120),
       text: buildStepPrompt(step, agent, brief),
       metadata: { runId, stepKey: step.key, childId, parentId: coordinatorId },
     }),
