@@ -31,7 +31,10 @@ export const POST = route("chat.use", async (req, { params, user }) => {
   }
 
   if (!isWriteTool(pending.tool)) throw bad("Tool ini tidak memerlukan konfirmasi.");
-  const result = await runTool(pending.tool, pending.args, { user, employeeId: pending.eid });
+  const conversation = await prisma.conversation.findUnique({ where: { id: params.id }, select: { projectId: true } });
+  const result = await runTool(pending.tool, pending.args, {
+    user, employeeId: pending.eid, projectId: pending.pid ?? conversation?.projectId ?? null,
+  });
   if (!result.ok) throw new HttpError(400, result.error);
 
   let body = `Berhasil: ${toolSummary(pending.tool, pending.args)}.`;

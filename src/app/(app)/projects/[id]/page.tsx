@@ -8,6 +8,7 @@ import { Avatar, Badge, Button, Card, CardHeader, EmptyState, ErrorState, PageLo
 import { ProjectForm } from "@/components/project-form";
 import { PriorityBadge, StatusBadge, TaskDrawer, TaskForm, isOverdue } from "@/components/task-ui";
 import { useApp } from "@/components/app-context";
+import { CrewPanel } from "@/components/crew-panel";
 import { PROJECT_STATUS_LABEL, fmtDate, timeAgo, cn } from "@/lib/utils";
 
 export default function ProjectDetail() {
@@ -56,6 +57,8 @@ export default function ProjectDetail() {
         <div className="overflow-x-auto p-2">{p.tasks.length === 0 ? <EmptyState title="Belum ada tugas di proyek ini" /> : (
           <table className="w-full text-left text-sm"><thead className="text-xs text-muted-foreground"><tr>{["ID", "Tugas", "PIC", "Prioritas", "Status", "Progress", "Deadline"].map((h) => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}</tr></thead>
             <tbody>{p.tasks.map((t: any) => <tr key={t.id} onClick={() => setOpen(t.id)} className="cursor-pointer border-t hover:bg-muted/50"><td className="px-3 py-2.5 text-muted-foreground">{t.code}</td><td className="px-3 py-2.5 font-medium">{t.title}</td><td className="px-3 py-2.5">{t.assignees.map((a: any) => a.employee.name.split(" ")[0]).join(", ")}</td><td className="px-3 py-2.5"><PriorityBadge p={t.priority} /></td><td className="px-3 py-2.5"><StatusBadge s={t.status} /></td><td className="w-28 px-3 py-2.5"><ProgressBar value={t.progress} /></td><td className={cn("px-3 py-2.5", isOverdue(t) && "text-danger")}>{fmtDate(t.deadline)}</td></tr>)}</tbody></table>)}</div></Card>
+
+      <CrewPanel projectId={id} write={write} />
 
       <Card><CardHeader title="Aktivitas proyek" />
         <div className="space-y-1 p-3">{data.logs.length === 0 && <EmptyState title="Belum ada aktivitas" />}{data.logs.map((l: any) => <button key={l.id} onClick={() => setOpen(l.task.id)} className="flex w-full gap-3 rounded-lg p-2 text-left text-sm hover:bg-muted"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-electric" /><span><b>{l.actorName}</b> · {l.task.code} — <span className="text-muted-foreground">{l.detail || l.action}</span><span className="block text-xs text-muted-foreground">{timeAgo(l.createdAt)}</span></span></button>)}</div></Card>

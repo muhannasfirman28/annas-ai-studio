@@ -5,6 +5,7 @@ import { prisma } from "./prisma";
 import { can } from "./rbac";
 import { logActivity, notify } from "./notify";
 import { nextTaskCode } from "./tasks";
+import { MAX_FILE_CHARS, listProjectFiles, readProjectFile, writeProjectFile } from "./project-files";
 import type { SessionUser } from "./auth";
 
 /** Tool yang boleh dipanggil agent AI. Semua akses data lewat Prisma + RBAC, tanpa SQL/perintah bebas. */
@@ -19,10 +20,16 @@ const day = (v?: Date | null) => (v ? v.toISOString().slice(0, 10) : null);
 export const TOOL_NAMES = [
   "list_projects", "list_tasks", "get_task", "list_employees",
   "get_report_summary", "search_workspace", "create_task", "update_task_status",
+  "list_project_files", "read_project_file", "write_project_file", "post_task_note",
 ] as const;
 export type ToolName = (typeof TOOL_NAMES)[number];
 
-type Ctx = { user: SessionUser; employeeId?: string | null };
+type Ctx = { user: SessionUser; employeeId?: string | null; projectId?: string | null };
+
+function requireProject(ctx: Ctx): string {
+  if (!ctx.projectId) throw new Error("Tool file hanya bisa dipakai di percakapan proyek. Buka ruang Diskusi proyek terkait.");
+  return ctx.projectId;
+}
 type ToolDef = {
   permission: string;
   write: boolean;
@@ -250,6 +257,68 @@ export const tools: Record<ToolName, ToolDef> = {
       return { id: task.id, code: task.code, title: task.title, status: task.status, progress: task.progress };
     },
   },
+
+  list_project_files: {
+    permission: "projects.read", write: false,
+    description: "Daftar file kode proyek beserta versi dan penulis terakhir. Hanya tersedia di percakapan proyek.",
+    example: 'TOOL: {"name":"list_project_files","args":{}}',
+    schema: z.object({ prefix: z.string().trim().max(120).optional() }),
+    run: async (a, ctx) => listProjectFiles(requireProject(ctx), a.prefix),
+  },
+
+  read_project_file: {
+    permission: "projects.read", write: false,
+    description: "Baca isi file kode proyek berdasarkan path relatif (mis. app/page.tsx). Hanya tersedia di percakapan proyek.",
+    example: 'TOOL: {"name":"read_project_file","args":{"path":"app/page.tsx"}}',
+    schema: z.object({ path: z.string().trim().min(1).max(200) }),
+    run: async (a, ctx) => readProjectFile(requireProject(ctx), a.path),
+  },
+
+  write_project_file: {
+    permission: "projects.write", write: true,
+    description: "Tulis atau perbarui file kode proyek. Path harus berada di app/, components/, data/, lib/, public/ atau file konfigurasi yang diizinkan. Membutuhkan konfirmasi user.",
+    example: 'TOOL: {"name":"write_project_file","args":{"path":"app/page.tsx","content":"export default function Page(){return <h1>Halo</h1>}"}}',
+    schema: z.object({
+      path: z.string().trim().min(1).max(200),
+      content: z.string().max(MAX_FILE_CHARS),
+    }),
+    run: async (a, ctx) => {
+      const projectId = requireProject(ctx);
+      const saved = await writeProjectFile({
+        projectId, path: a.path, content: a.content,
+        authorEmployeeId: ctx.employeeId ?? ctx.user.employeeId ?? null,
+        authorUserId: ctx.user.id,
+      });
+      await logActivity(`${ctx.user.name} menulis file ${saved.path} (v${saved.version}) via AI`, "project_file",
+        ctx.employeeId ?? ctx.user.employeeId, `/projects/${projectId}`);
+      return saved;
+    },
+  },
+
+  post_task_note: {
+    permission: "tasks.write", write: true,
+    description: "Simpan catatan/deliverable (PRD, wireframe, design token, test plan, laporan) sebagai komentar pada tugas. Membutuhkan konfirmasi user.",
+    example: 'TOOL: {"name":"post_task_note","args":{"task":"TSK-003","body":"Design system: hitam/putih/dark navy"}}',
+    schema: z.object({
+      task: z.string().trim().min(1).max(100),
+      body: z.string().trim().min(1).max(6000),
+    }),
+    run: async (a, ctx) => {
+      const projectId = requireProject(ctx);
+      const task = await prisma.task.findFirst({
+        where: {
+          ...(a.task.length === 24 && /^[a-z0-9]+$/i.test(a.task) ? { id: a.task } : { code: a.task }),
+          projectId,
+        },
+        select: { id: true, code: true, title: true },
+      });
+      if (!task) throw new Error("Tugas tidak ditemukan di proyek ini.");
+      await prisma.taskComment.create({ data: { taskId: task.id, authorId: ctx.user.id, body: a.body } });
+      await logActivity(`${ctx.user.name} menambahkan catatan pada ${task.code} via AI`, "task",
+        ctx.employeeId ?? ctx.user.employeeId, `/tasks?open=${task.id}`);
+      return { id: task.id, code: task.code, title: task.title, posted: true };
+    },
+  },
 };
 
 export function isWriteTool(name: string): name is ToolName {
@@ -267,17 +336,32 @@ export const TOOL_PROMPT = [
   "- Tool bertanda 'membutuhkan konfirmasi' tidak langsung dijalankan; tetap minta dengan format TOOL:, sistem akan meminta konfirmasi ke user.",
   "- Jika tidak perlu tool atau sudah punya cukup data, balas langsung dengan teks biasa (tanpa awalan TOOL:).",
   "- Maksimal beberapa panggilan tool per jawaban. Jangan mengulang tool yang sama tanpa alasan baru.",
+  "- Tool file hanya dipakai di percakapan proyek. Jika path/konten mengandung newline atau tanda kutip, escape sebagai \\n dan \\\" di dalam JSON.",
+  "- Untuk dokumen panjang (PRD, desain, test plan), pakai post_task_note pada tugas yang relevan, bukan mengarang hasil yang sudah tersimpan.",
 ].join("\n");
 
 export function parseToolCall(text: string): { name: string; args: unknown } | null {
-  const line = text.split("\n").map((s) => s.trim()).find((s) => s.startsWith("TOOL:"));
-  if (!line) return null;
-  const raw = line.slice(5).trim();
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
+  const at = text.indexOf("TOOL:");
+  if (at < 0) return null;
+  const start = text.indexOf("{", at + 5);
+  if (start < 0) return null;
+  // Konten file mengandung newline, jadi cari penutup JSON dengan menghitung brace di luar string.
+  let depth = 0; let inString = false; let escaped = false; let end = -1;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === "\\" && inString) { escaped = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === "{") depth++;
+    if (ch === "}") {
+      depth--;
+      if (depth === 0) { end = i; break; }
+    }
+  }
+  if (end < 0) return null;
   try {
-    const parsed = JSON.parse(raw.slice(start, end + 1));
+    const parsed = JSON.parse(text.slice(start, end + 1));
     if (parsed && typeof parsed.name === "string" && parsed.args && typeof parsed.args === "object") {
       return { name: parsed.name, args: parsed.args };
     }
@@ -321,7 +405,7 @@ export async function runTool(name: string, args: unknown, ctx: Ctx): Promise<To
 const secret = () => new TextEncoder().encode(process.env.AUTH_SECRET || "dev-insecure-secret-change-me-please-32chars");
 type Confirmation = {
   purpose: "ai_tool_confirm"; uid: string; cid: string; eid: string;
-  tool: ToolName; args: unknown; nonce: string;
+  pid?: string | null; tool: ToolName; args: unknown; nonce: string;
 };
 export async function createConfirmation(input: Omit<Confirmation, "purpose">, minutes = 10) {
   return new SignJWT({ ...input, purpose: "ai_tool_confirm" } as never)

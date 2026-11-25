@@ -75,6 +75,22 @@ enum MessageKind {
   INSTRUCTION
 }
 
+enum CrewRunStatus {
+  PLANNED
+  APPROVED
+  RUNNING
+  DONE
+  FAILED
+  CANCELLED
+}
+
+enum CrewActionStatus {
+  PENDING
+  DONE
+  ERROR
+  SKIPPED
+}
+
 // 1. users
 model User {
   id           String   @id @default(cuid())
@@ -153,6 +169,8 @@ model Employee {
   agentConfig AiAgentConfiguration?
   activities  ActivityLog[]
   taskLogs    TaskActivityLog[]
+  files       ProjectFile[]
+  crewActions CrewRunAction[]
 
   @@map("employees")
 }
@@ -188,8 +206,72 @@ model Project {
   milestones    Milestone[]
   conversations Conversation[]
   reports       EmployeeReport[]
+  files         ProjectFile[]
+  crewRuns      CrewRun[]
 
   @@map("projects")
+}
+
+/** File kode yang ditulis karyawan AI. Disimpan di DB agar aman di serverless. */
+model ProjectFile {
+  id               String    @id @default(cuid())
+  projectId        String
+  project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  path             String
+  content          String
+  version          Int       @default(1)
+  authorEmployeeId String?
+  authorEmployee   Employee? @relation(fields: [authorEmployeeId], references: [id], onDelete: SetNull)
+  authorUserId     String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([projectId, path])
+  @@index([projectId])
+  @@map("project_files")
+}
+
+/** Satu paket aksi crew yang disetujui sekali oleh user. */
+model CrewRun {
+  id           String        @id @default(cuid())
+  projectId    String
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  brief        String
+  status       CrewRunStatus @default(PLANNED)
+  plan         Json
+  summary      String        @default("")
+  createdById  String?
+  approvedById String?
+  approvedAt   DateTime?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime      @default(now())
+
+  actions CrewRunAction[]
+
+  @@index([projectId, createdAt])
+  @@map("crew_runs")
+}
+
+model CrewRunAction {
+  id         String           @id @default(cuid())
+  runId      String
+  run        CrewRun          @relation(fields: [runId], references: [id], onDelete: Cascade)
+  seq        Int
+  kind       String
+  tool       String
+  target     String           @default("")
+  employeeId String?
+  employee   Employee?        @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  payload    Json
+  status     CrewActionStatus @default(PENDING)
+  error      String?
+  result     Json?
+  createdAt  DateTime         @default(now())
+  finishedAt DateTime?
+
+  @@index([runId, seq])
+  @@map("crew_run_actions")
 }
 
 // 7. project_members

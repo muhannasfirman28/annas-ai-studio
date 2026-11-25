@@ -11,6 +11,9 @@ import {
 export const POST = route("chat.use", async (req, { params, user }) => {
   const { employeeId } = z.object({ employeeId: z.string() }).parse(await json(req));
   if (!llmConfigured()) throw new HttpError(503, "Integrasi AI belum aktif: OPENAI_API_KEY belum diatur. Lihat README bagian Integrasi AI.");
+  const conversation = await prisma.conversation.findUnique({ where: { id: params.id }, select: { projectId: true } });
+  if (!conversation) throw bad("Percakapan tidak ditemukan.");
+  const projectId = conversation.projectId;
   const cfg = await prisma.aiAgentConfiguration.findUnique({ where: { employeeId }, include: { employee: true } });
   if (!cfg) throw bad("Konfigurasi agent tidak ditemukan.");
   if (!cfg.enabled) throw bad(`Agent ${cfg.employee.name} belum diaktifkan di Settings → AI Model.`);
@@ -37,7 +40,7 @@ export const POST = route("chat.use", async (req, { params, user }) => {
       trace.push({ name: call.name, status: "pending" });
       const token = await createConfirmation({
         uid: user.id, cid: params.id, eid: cfg.employeeId,
-        tool: call.name as ToolName, args: call.args, nonce: newNonce(),
+        tool: call.name as ToolName, args: call.args, nonce: newNonce(), pid: projectId,
       });
       const summary = toolSummary(call.name, call.args);
       confirmation = { token, tool: call.name, summary };
@@ -45,7 +48,7 @@ export const POST = route("chat.use", async (req, { params, user }) => {
       break;
     }
 
-    const result = await runTool(call.name, call.args, { user, employeeId: cfg.employeeId });
+    const result = await runTool(call.name, call.args, { user, employeeId: cfg.employeeId, projectId });
     trace.push({ name: call.name, status: result.ok ? "ok" : "error" });
     if (!result.ok && trace.filter((t) => t.name === call.name && t.status === "error").length >= 2) {
       text = `Tool ${call.name} gagal berulang kali: ${result.error}`;
