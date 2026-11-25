@@ -248,8 +248,9 @@ async function createCoordinatorSession(runId, workspace, stepKey = "") {
 }
 
 async function createChildSession(parentId, step, agent) {
-  const configured = String(agent?.model || "");
-  const modelId = configured.includes("/") ? configured.slice(configured.indexOf("/") + 1) : MODEL_ID;
+  // ID model dari Settings Studio sudah persis seperti GET /api/model,
+  // mis. "meta/llama-3.2-11b-vision-instruct". Jangan dipotong prefix-nya.
+  const modelId = String(agent?.model || "").trim() || MODEL_ID;
   const res = await opencodeFetch("/api/session", {
     method: "POST",
     body: JSON.stringify({
