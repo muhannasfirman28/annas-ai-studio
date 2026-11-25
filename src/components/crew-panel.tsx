@@ -17,14 +17,16 @@ class PreviewBoundary extends React.Component<{ children: React.ReactNode }, { e
 
 const PLACEHOLDER_BRIEF = `# WEBSITE PROJECT SPECIFICATION
 
-Nama: Annas Firman – Personal Portfolio
-Tujuan: portfolio pribadi profesional sebagai Full-Stack Web Developer.
-Halaman: Home, About Me, Skills, Experience, Projects, Certifications, Contact.
-Gaya: modern, minimalis, elegan, hitam/putih/dark navy, typography clean, animasi subtle, responsive.
-Tech: Next.js App Router, TypeScript, Tailwind CSS, Framer Motion, Lucide React.
-Konten: Annas Firman, S1 Sistem Informasi Universitas Bina Bangsa (E-Business), internship Diskominfo Provinsi Banten, PHP/Laravel/JS/React/Next.js/MySQL/HTML/CSS/Git, Knowledge Base, Kost + Midtrans.
-Contact: link email, LinkedIn, GitHub (tanpa form backend).
-Prioritas: UI/UX, responsive, navigasi berfungsi, project showcase, SEO.`;
+Nama: Nama website atau acara kamu
+Tujuan: jelaskan singkat fungsi website dan siapa penggunanya.
+Halaman: sebutkan bagian yang diinginkan, misalnya Beranda, Tentang, Agenda, Pembicara, FAQ, Kontak.
+Gaya: modern, minimalis, responsif, sebutkan warna atau kesan yang diinginkan.
+Tech: Next.js App Router, TypeScript, Tailwind CSS, Lucide React.
+Konten: poin-poin penting yang harus tampil di website; pisahkan dengan titik koma.
+Kontak: email, WhatsApp, atau link media sosial yang tersedia.
+Prioritas: tampilan rapi, responsif, navigasi berfungsi, tidak perlu database atau login.
+
+Catatan: ganti seluruh contoh di atas dengan kebutuhanmu.`;
 
 export function CrewPanel({ projectId, write }: { projectId: string; write: boolean }) {
   const toast = useToast();

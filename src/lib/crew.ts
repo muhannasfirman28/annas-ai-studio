@@ -4,96 +4,17 @@ import { runTool } from "./agent-tools";
 import { templateFile } from "./crew-templates";
 import { listProjectFiles, readProjectFile } from "./project-files";
 import { crewEngine, runCrewStepOnWorker, startCrewOnWorker } from "./crew-client";
+import {
+  CREW_PRESET_LABEL, detectPreset, rolesForBrief,
+  type CrewPreset,
+} from "./crew-presets";
 import type { SessionUser } from "./auth";
 
 /** Orkestrator crew: satu karyawan selesai -> otomatis lanjut ke karyawan berikutnya. */
 
-type FileSpec = { path: string; purpose: string };
-type RoleSpec = {
-  key: string; name: string; title: string; focus: string;
-  task: string; description: string; priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
-  note: string; files: FileSpec[];
-};
-
-const ROLES: RoleSpec[] = [
-  {
-    key: "annas", name: "Annas", title: "Founder & CEO", focus: "scope, prioritas, dan kriteria selesai",
-    task: "Tetapkan scope & prioritas website", description: "Terjemahkan brief menjadi tujuan, batasan Scope, prioritas fitur, dan kriteria selesai.", priority: "HIGH",
-    note: "Scope dan prioritas ditetapkan berdasarkan brief. Prioritaskan UI/UX, responsive, navigasi yang berfungsi, then konten dan SEO.", files: [],
-  },
-  {
-    key: "arjun", name: "Arjun", title: "COO", focus: "WBS, urutan kerja, dan tenggat",
-    task: "Susun WBS & urutan kerja crew", description: "Uraikan deliverable per divisi dan tentukan urutan eksekusi yang saling bergantung.", priority: "MEDIUM",
-    note: "Urutan kerja: Annas (scope) → Arjun (WBS) → Kenji (arsitektur) → Mei Lin (desain) → Hiroshi (halaman) → Min-jun (interaksi) → Aisha (konten/SEO) → Wei Zhang (QA).", files: [
-      { path: "README.md", purpose: "Ringkasan proyek, cara menjalankan lokal di port 3001, dan catatan deploy Vercel" },
-    ],
-  },
-  {
-    key: "kenji", name: "Kenji", title: "CTO", focus: "arsitektur Next.js App Router dan konfigurasi build",
-    task: "Tentukan arsitektur & setup proyek", description: "Pilih struktur App Router, data statis, konfigurasi TypeScript/Tailwind/PostCSS, dan strategi SEO dasar.", priority: "HIGH",
-    note: "Arsitektur: App Router, TypeScript strict, Tailwind CSS, data statis di folder data/, metadata di layout, tanpa backend.", files: [
-      { path: "package.json", purpose: "Dependensi Next.js, React, TypeScript, Tailwind, Framer Motion, Lucide" },
-      { path: "tsconfig.json", purpose: "TypeScript strict + alias @/*" },
-      { path: "next.config.mjs", purpose: "Konfigurasi Next.js untuk Vercel" },
-      { path: "postcss.config.mjs", purpose: "Plugin Tailwind dan autoprefixer" },
-      { path: "tailwind.config.ts", purpose: "Warna navy, typography clean, konten app/components/data" },
-    ],
-  },
-  {
-    key: "mei-lin", name: "Mei Lin", title: "UI/UX Designer", focus: "design system hitam/putih/dark navy, spacing, dan motion guideline",
-    task: "Buat design system & wireframe 7 section", description: "Tetapkan token visual, tipografi, spacing, state hover/focus, dan guideline animasi subtle.", priority: "HIGH",
-    note: "Design system: hitam/putih/dark navy, whitespace proporsional, tipografi clean, animasi 0.4-0.6 detik easOut, hormati prefers-reduced-motion. Hindari neon berlebihan.", files: [
-      { path: "app/globals.css", purpose: "Base style Tailwind, smooth scroll, container, kartu" },
-      { path: "components/section-heading.tsx", purpose: "Heading section konsisten dengan eyebrow" },
-      { path: "components/reveal.tsx", purpose: "Wrapper animasi Framer Motion dengan useReducedMotion" },
-      { path: "public/avatar.svg", purpose: "Placeholder foto profesional" },
-      { path: "public/project-knowledge-base.svg", purpose: "Thumbnail placeholder Knowledge Base" },
-      { path: "public/project-kost.svg", purpose: "Thumbnail placeholder Sistem Informasi Kost" },
-    ],
-  },
-  {
-    key: "hiroshi", name: "Hiroshi", title: "Lead Full-Stack Developer", focus: "layout, komponen, dan halaman utama",
-    task: "Implementasi layout & section utama", description: "Bangun App Router layout, halaman utama, header/footer navigasi, Hero, About, dan Projects.", priority: "HIGH",
-    note: "Implementasi memakai komponen dari Mei Lin dan config dari Kenji. Semua navigation link mengarah ke anchor section yang benar.", files: [
-      { path: "app/layout.tsx", purpose: "Root layout + metadata SEO dari data/profile" },
-      { path: "app/page.tsx", purpose: "Komposisi 7 section portfolio" },
-      { path: "components/site-header.tsx", purpose: "Header responsif dengan navigasi 7 section" },
-      { path: "components/site-footer.tsx", purpose: "Footer sederhana" },
-      { path: "components/hero.tsx", purpose: "Hero + CTA ke Projects dan Contact" },
-      { path: "components/about.tsx", purpose: "Profil, pendidikan, konsentrasi" },
-      { path: "components/projects.tsx", purpose: "Showcase project dengan data statis" },
-      { path: "components/contact.tsx", purpose: "Section Contact berisi link email, LinkedIn, dan GitHub tanpa form" },
-    ],
-  },
-  {
-    key: "min-jun", name: "Min-jun", title: "AI Engineer", focus: "mikro-interaksi ringan dan aksesibilitas gerak",
-    task: "Implementasi section interaktif", description: "Bangun Skills, Experience, dan Certifications dengan animasi halus serta dukungan reduced motion.", priority: "MEDIUM",
-    note: "Gunakan Reveal dari Mei Lin. Hindari animasi berat; cukup fade/slide 16px dan transisi hover.", files: [
-      { path: "components/skills.tsx", purpose: "Grid skill dari data statis" },
-      { path: "components/experience.tsx", purpose: "Timeline pengalaman magang" },
-      { path: "components/certifications.tsx", purpose: "Daftar sertifikasi" },
-    ],
-  },
-  {
-    key: "aisha", name: "Aisha", title: "Data Analyst", focus: "konten profesional, data statis, dan metadata SEO",
-    task: "Tulis konten & data profesional", description: "Isi seluruh file data berdasarkan profil Annas Firman dan siapkan metadata/OG.", priority: "HIGH",
-    note: "Konten: Annas Firman, S1 Sistem Informasi Universitas Bina Bangsa (E-Business), Full-Stack Web Developer, internship Diskominfo Banten, PHP/Laravel/JS/React/Next.js/MySQL/HTML/CSS/Git, Knowledge Base, Kost + Midtrans. Contact link nyata.", files: [
-      { path: "data/profile.ts", purpose: "Profil, summary, pendidikan, dan link kontak nyata" },
-      { path: "data/skills.ts", purpose: "Kelompok skill" },
-      { path: "data/experience.ts", purpose: "Pengalaman internship" },
-      { path: "data/projects.ts", purpose: "Daftar project showcase" },
-      { path: "data/certifications.ts", purpose: "Sertifikasi dan pencapaian" },
-    ],
-  },
-  {
-    key: "wei", name: "Wei Zhang", title: "QA & Security Engineer", focus: "QA responsif, aksesibilitas, performa, dan link",
-    task: "Review QA & keamanan hasil crew", description: "Baca seluruh file yang sudah dibuat, lalu tulis checklist temuan dan perbaikan yang disarankan.", priority: "MEDIUM",
-    note: "QA checklist: 7 section hadir, semua link/CTA nyata, reduced motion, kontras teks, layout mobile/tablet/desktop, metadata/OG, tidak ada file .env, tidak ada kredensial, build siap deploy Vercel.", files: [],
-  },
-];
-
 export type CrewPlan = {
   brief: string;
+  preset: CrewPreset;
   steps: {
     key: string; name: string; title: string; focus: string;
     employeeId: string; task: string; description: string; files: string[]; note: string;
@@ -124,19 +45,46 @@ async function llmAnswer(cfg: any, system: string, prompt: string, deadline = 0)
 }
 
 export async function buildCrewPlan(brief: string): Promise<CrewPlan> {
-  const names = ROLES.map((r) => r.name);
+  const roles = rolesForBrief(brief);
+  const preset = detectPreset(brief);
+  const names = roles.map((r) => r.name);
   const employees = await prisma.employee.findMany({
     where: { name: { in: names } }, select: { id: true, name: true },
   });
   const byName = new Map(employees.map((e) => [e.name, e.id]));
   const missing = names.filter((n) => !byName.has(n));
   if (missing.length) throw new Error(`Karyawan tidak ditemukan di database: ${missing.join(", ")}. Jalankan seed dulu.`);
-  const steps = ROLES.map((r) => ({
+  const steps = roles.map((r) => ({
     key: r.key, name: r.name, title: r.title, focus: r.focus,
     employeeId: byName.get(r.name)!, task: r.task, description: r.description,
     files: r.files.map((f) => f.path), note: r.note,
   }));
-  return { brief, steps, totalFiles: ROLES.reduce((n, r) => n + r.files.length, 0) };
+  return { brief, preset, steps, totalFiles: roles.reduce((n, r) => n + r.files.length, 0) };
+}
+
+/** Buang file dari crew run sebelumnya yang tidak dipakai rencana baru (mis. portfolio lama). */
+async function removeStaleCrewFiles(runId: string) {
+  const run = await prisma.crewRun.findUnique({
+    where: { id: runId },
+    select: { projectId: true, createdAt: true, actions: { select: { payload: true } } },
+  });
+  if (!run) return;
+  const nextPaths = new Set(
+    run.actions
+      .map((a) => (a.payload as { path?: unknown })?.path)
+      .filter((path): path is string => typeof path === "string"),
+  );
+  const previous = await prisma.crewRun.findFirst({
+    where: { projectId: run.projectId, id: { not: runId }, createdAt: { lt: run.createdAt } },
+    orderBy: { createdAt: "desc" },
+    select: { plan: true },
+  });
+  const previousPaths = ((previous?.plan as { steps?: { files?: string[] }[] } | undefined)?.steps ?? [])
+    .flatMap((step) => step.files ?? []);
+  const stale = [...new Set(previousPaths)].filter((path) => !nextPaths.has(path));
+  if (stale.length) {
+    await prisma.projectFile.deleteMany({ where: { projectId: run.projectId, path: { in: stale } } });
+  }
 }
 
 export async function createCrewRun(input: { projectId: string; brief: string; user: SessionUser }) {
@@ -146,11 +94,12 @@ export async function createCrewRun(input: { projectId: string; brief: string; u
   const project = await prisma.project.findUnique({ where: { id: input.projectId }, select: { id: true, name: true } });
   if (!project) throw new Error("Proyek tidak ditemukan.");
   const plan = await buildCrewPlan(brief);
+  const roles = rolesForBrief(brief);
 
   const actions: { seq: number; kind: string; tool: string; target: string; employeeId: string; payload: any }[] = [];
   let seq = 0;
   for (const step of plan.steps) {
-    const role = ROLES.find((r) => r.name === step.name)!;
+    const role = roles.find((r) => r.name === step.name)!;
     actions.push({
       seq: ++seq, kind: "task", tool: "create_task", target: step.task, employeeId: step.employeeId,
       payload: {
@@ -173,7 +122,7 @@ export async function createCrewRun(input: { projectId: string; brief: string; u
   const run = await prisma.crewRun.create({
     data: {
       projectId: input.projectId, brief, status: "PLANNED", plan: plan as any,
-      summary: `${plan.steps.length} karyawan · ${plan.totalFiles} file · ${actions.length} aksi`,
+      summary: `${CREW_PRESET_LABEL[plan.preset]} · ${plan.steps.length} karyawan · ${plan.totalFiles} file · ${actions.length} aksi`,
       createdById: input.user.id,
       actions: { create: actions },
     },
@@ -190,6 +139,7 @@ async function executeCrewRunDirect(input: { runId: string; user: SessionUser })
   });
   if (!run) throw new Error("Crew run tidak ditemukan.");
   if (run.status !== "PLANNED" && run.status !== "APPROVED") throw new Error(`Crew run sudah berstatus ${run.status} dan tidak bisa dijalankan ulang.`);
+  await removeStaleCrewFiles(run.id);
 
   await prisma.crewRun.update({
     where: { id: run.id },
@@ -198,6 +148,7 @@ async function executeCrewRunDirect(input: { runId: string; user: SessionUser })
 
   const ctx = { user: input.user, projectId: run.projectId };
   const plan = run.plan as unknown as CrewPlan;
+  const roles = rolesForBrief(plan.brief);
   const tasksByTitle = new Map<string, { id: string; code: string }>();
   let done = 0; let failed = 0; let lastError = "";
   const started = Date.now();
@@ -206,7 +157,7 @@ async function executeCrewRunDirect(input: { runId: string; user: SessionUser })
 
   try {
     for (const step of plan.steps) {
-      const role = ROLES.find((r) => r.name === step.name)!;
+      const role = roles.find((r) => r.name === step.name)!;
       const cfg = await prisma.aiAgentConfiguration.findUnique({ where: { employeeId: step.employeeId } });
       const prior = await listProjectFiles(run.projectId);
       const context = prior.slice(0, 10).map((f) => `${f.path} (${f.content.length} karakter)`).join(", ") || "belum ada file";
@@ -248,7 +199,7 @@ async function executeCrewRunDirect(input: { runId: string; user: SessionUser })
             if (!result.ok) throw new Error(result.error);
           } else if (action.kind === "file") {
             const payload = args as { path: string; purpose: string };
-            const content = generatedFiles[payload.path] || templateFile(payload.path, plan.brief);
+            const content = generatedFiles[payload.path] || templateFile(payload.path, plan.brief, plan.preset ?? detectPreset(plan.brief));
             const result = await runTool("write_project_file", { path: payload.path, content }, { ...ctx, employeeId: step.employeeId });
             if (!result.ok) throw new Error(result.error);
           }
@@ -305,6 +256,7 @@ async function dispatchCrewRun(input: { runId: string; user: SessionUser }) {
   if (run.status !== "PLANNED" && run.status !== "APPROVED") {
     throw new Error(`Crew run sudah berstatus ${run.status} dan tidak bisa dijalankan ulang.`);
   }
+  await removeStaleCrewFiles(run.id);
 
   const plan = run.plan as unknown as CrewPlan;
   const fileActions = run.actions.filter((a) => a.kind === "file");

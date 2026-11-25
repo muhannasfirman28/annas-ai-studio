@@ -1,8 +1,9 @@
 /** Template sumber Next.js untuk hasil kerja crew. Dipakai bila LLM tidak menghasilkan konten valid. */
+import { PRESET_SECTIONS, detectPreset, type CrewPreset } from "./crew-presets";
 
 const nameFrom = (brief: string) => /nama\s*[:\-]\s*([^\n]+)/i.exec(brief)?.[1]?.trim() || "Annas Firman";
 
-export function templateFile(path: string, brief: string): string {
+function portfolioTemplate(path: string, brief: string): string {
   const name = nameFrom(brief);
   const map: Record<string, string> = {
     "package.json": `{
@@ -465,4 +466,91 @@ Buka http://localhost:3001
 `,
   };
   return map[path] ?? `// ${path}\n// File ini dibuat oleh crew Annas AI Studio. Periksa sebelum dipakai.\n`;
+}
+
+type BriefInfo = {
+  name: string; summary: string; purpose: string; pages: string;
+  style: string; tech: string; content: string; priority: string;
+};
+
+function briefInfo(brief: string): BriefInfo {
+  const field = (label: string, fallback: string) =>
+    new RegExp(`${label}\\s*[:\\-]\\s*([^\\n]+)`, "i").exec(brief || "")?.[1]?.trim() || fallback;
+  return {
+    name: field("Nama", "Website Saya"),
+    summary: field("Tujuan", "Website sederhana yang dibuat oleh crew Annas AI Studio."),
+    purpose: field("Tujuan", "Menyampaikan informasi dengan jelas."),
+    pages: field("Halaman", "Beranda, Tentang, Fitur, Kontak"),
+    style: field("Gaya", "modern, minimalis, dan responsif"),
+    tech: field("Tech", "Next.js App Router, TypeScript, Tailwind CSS"),
+    content: field("Konten", "Tambahkan konten sesuai kebutuhan di data/site.ts."),
+    priority: field("Prioritas", "tampilan rapi, responsif, dan navigasi berfungsi"),
+  };
+}
+
+const q = (value: string) => JSON.stringify(value);
+const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "website";
+
+function sectionComponent(key: string, component: string, label: string, firstKey: string): string {
+  if (key === "hero") {
+    return `import { site } from "@/data/site";\n\nexport default function ${component}() {\n  return (\n    <section id="hero" className="bg-navy py-28 text-white">\n      <div className="container-page">\n        <p className="text-sm uppercase tracking-[0.2em] text-slate-400">{site.name}</p>\n        <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight sm:text-5xl">{site.sections.hero.title}</h1>\n        <p className="mt-5 max-w-2xl leading-8 text-slate-300">{site.sections.hero.text}</p>\n        <a href="#${firstKey}" className="mt-8 inline-flex rounded-xl bg-white px-5 py-3 text-sm font-semibold text-navy">Mulai</a>\n      </div>\n    </section>\n  );\n}\n`;
+  }
+  if (key === "cta") {
+    return `import { site } from "@/data/site";\n\nexport default function ${component}() {\n  return (\n    <section id="cta" className="bg-navy py-20 text-white">\n      <div className="container-page">\n        <h2 className="text-3xl font-semibold tracking-tight">{site.sections.cta.title}</h2>\n        <p className="mt-3 max-w-2xl leading-8 text-slate-300">{site.sections.cta.text}</p>\n        <a href={site.contact[0]?.href ?? "#contact"} className="mt-7 inline-flex rounded-xl bg-white px-5 py-3 text-sm font-semibold text-navy">Hubungi kami</a>\n      </div>\n    </section>\n  );\n}\n`;
+  }
+  const contactBlock = key === "contact"
+    ? `\n      <div className="mt-6 flex flex-wrap gap-3">\n        {site.contact.map((c) => <a key={c.label} href={c.href} className="rounded-lg border px-4 py-2 text-sm hover:bg-slate-50">{c.label}</a>)}\n      </div>`
+    : "";
+  return `import { site } from "@/data/site";\n\nexport default function ${component}() {\n  const s = site.sections.${key};\n  return (\n    <section id="${key}" className="container-page py-20">\n      <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{${q(label)}}</span>\n      <h2 className="mt-3 text-3xl font-semibold tracking-tight text-navy">{s.title}</h2>\n      <p className="mt-3 max-w-2xl leading-8 text-slate-600">{s.text}</p>\n      <div className="mt-8 grid gap-4 sm:grid-cols-2">\n        {site.items.map((item, i) => (\n          <article key={i} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">\n            <h3 className="font-semibold text-navy">{item.title}</h3>\n            <p className="mt-2 text-sm text-slate-600">{item.text}</p>\n          </article>\n        ))}\n      </div>${contactBlock}\n    </section>\n  );\n}\n`;
+}
+
+function genericTemplate(path: string, brief: string, preset: Exclude<CrewPreset, "portfolio">): string {
+  const info = briefInfo(brief);
+  const sections = PRESET_SECTIONS[preset];
+  const firstKey = sections.find((s) => s.key !== "hero")?.key ?? "contact";
+  const match = sections.find((s) => s.path === path);
+  if (match) return sectionComponent(match.key, match.component, match.label, firstKey);
+
+  switch (path) {
+    case "package.json":
+      return `{\n  "name": "${slug(info.name)}",\n  "version": "1.0.0",\n  "private": true,\n  "scripts": {\n    "dev": "next dev -p 3001",\n    "build": "next build",\n    "start": "next start -p 3001"\n  },\n  "dependencies": {\n    "lucide-react": "^0.468.0",\n    "next": "^15.5.0",\n    "react": "^19.0.0",\n    "react-dom": "^19.0.0"\n  },\n  "devDependencies": {\n    "@types/node": "^22.0.0",\n    "@types/react": "^19.0.0",\n    "@types/react-dom": "^19.0.0",\n    "autoprefixer": "^10.4.20",\n    "postcss": "^8.4.49",\n    "tailwindcss": "^3.4.17",\n    "typescript": "^5.7.0"\n  }\n}\n`;
+    case "README.md":
+      return `# ${info.name}\n\n${info.summary}\n\n## Menjalankan\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n\nBuka http://localhost:3001. Isi seluruh teks website di \`data/site.ts\`. Siap di-deploy ke Vercel.\n\nCatatan: ${info.priority}. Tech: ${info.tech}. Gaya: ${info.style}.\n`;
+    case "app/page.tsx":
+      return `import SiteHeader from "@/components/site-header";\nimport SiteFooter from "@/components/site-footer";\n${sections.map((s) => `import ${s.component} from "@/components/${s.key}";`).join("\n")}\n\nexport default function Page() {\n  return (\n    <>\n      <SiteHeader />\n      <main>\n        ${sections.map((s) => `<${s.component} />`).join("\n        ")}\n      </main>\n      <SiteFooter />\n    </>\n  );\n}\n`;
+    case "app/layout.tsx":
+      return `import type { Metadata } from "next";\nimport "./globals.css";\nimport { site } from "@/data/site";\n\nexport const metadata: Metadata = { title: site.name, description: site.summary };\n\nexport default function RootLayout({ children }: { children: React.ReactNode }) {\n  return <html lang="id"><body>{children}</body></html>;\n}\n`;
+    case "data/site.ts": {
+      const lines = info.content.split(/[;\n]/).map((s) => s.trim()).filter(Boolean);
+      const sources = lines.length >= 2 ? lines : info.pages.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
+      const items = sources.slice(0, 6).map((line, i) => `    { title: ${q(line.slice(0, 70))}, text: ${q(sections[i % sections.length]?.purpose ?? info.purpose)} },`).join("\n");
+      const sectionEntries = sections.map((s) =>
+        `    ${s.key}: { title: ${q(s.key === "hero" ? info.name : s.label)}, text: ${q(s.key === "hero" ? info.summary : info.content)} },`,
+      ).join("\n");
+      return `export const site = {\n  name: ${q(info.name)},\n  summary: ${q(info.summary)},\n  sections: {\n${sectionEntries}\n  },\n  items: [\n${items}\n  ],\n  contact: [\n    { label: "Email", href: "mailto:hello@example.com" },\n    { label: "LinkedIn", href: "https://www.linkedin.com/" },\n  ],\n};\n`;
+    }
+    case "components/site-header.tsx":
+      return `import { site } from "@/data/site";\n\nexport default function SiteHeader() {\n  const links = Object.entries(site.sections).filter(([key]) => key !== "hero" && key !== "cta");\n  return (\n    <header className="sticky top-0 z-50 border-b bg-white/90 backdrop-blur">\n      <nav className="container-page flex h-16 items-center justify-between">\n        <a href="#hero" className="font-semibold text-navy">{site.name}</a>\n        <div className="hidden gap-5 text-sm text-slate-600 md:flex">\n          {links.map(([key, value]) => <a key={key} href={'#' + key} className="hover:text-navy">{value.title}</a>)}\n        </div>\n      </nav>\n    </header>\n  );\n}\n`;
+    case "components/site-footer.tsx":
+      return `import { site } from "@/data/site";\n\nexport default function SiteFooter() {\n  return <footer className="border-t bg-navy py-8 text-sm text-slate-300"><div className="container-page">© {new Date().getFullYear()} {site.name}. Dibangun dengan Next.js.</div></footer>;\n}\n`;
+    case "components/section-heading.tsx":
+      return `export default function SectionHeading({ eyebrow, title, description }: { eyebrow: string; title: string; description?: string }) {\n  return (\n    <div className="mb-8">\n      <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{eyebrow}</span>\n      <h2 className="mt-3 text-3xl font-semibold tracking-tight text-navy">{title}</h2>\n      {description && <p className="mt-3 text-slate-600">{description}</p>}\n    </div>\n  );\n}\n`;
+    case "components/reveal.tsx":
+      return `export default function Reveal({ children }: { children: React.ReactNode }) {\n  return <>{children}</>;\n}\n`;
+    case "public/hero-placeholder.svg":
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400"><rect width="640" height="400" fill="#eef2ff"/><rect x="60" y="60" width="520" height="280" rx="20" fill="#fff" stroke="#c7d2fe"/><text x="320" y="220" text-anchor="middle" font-family="sans-serif" font-size="28" fill="#3730a3">${info.name.replace(/[<>&]/g, "")}</text></svg>\n`;
+    case "tsconfig.json":
+    case "next.config.mjs":
+    case "postcss.config.mjs":
+    case "tailwind.config.ts":
+    case "app/globals.css":
+      return portfolioTemplate(path, brief);
+    default:
+      return `// ${path}\n// File ini dibuat oleh crew Annas AI Studio. Periksa sebelum dipakai.\n`;
+  }
+}
+
+/** Template mengikuti jenis website pada brief; portfolio hanya dipakai bila brief memang portfolio. */
+export function templateFile(path: string, brief: string, preset: CrewPreset = detectPreset(brief)): string {
+  return preset === "portfolio" ? portfolioTemplate(path, brief) : genericTemplate(path, brief, preset);
 }
