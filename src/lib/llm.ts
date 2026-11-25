@@ -24,25 +24,31 @@ export async function chatCompletion(opts: { model: string; system: string; temp
     if (localBridge && opts.provider) body.provider = opts.provider;
 
     for (let attempt = 0; attempt < 2; attempt++) {
-      const res = await fetch(`${base}/chat/completions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(60000),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const text = data?.choices?.[0]?.message?.content;
-        if (!text) throw new Error("Respons LLM kosong.");
-        return String(text);
-      }
-      lastError = `Provider LLM mengembalikan ${res.status}: ${(await res.text()).slice(0, 200)}`;
-      // 429/529/5xx bersifat sementara — coba lagi, lalu pindah ke model cadangan.
-      if (res.status === 429 || res.status === 529 || res.status >= 500) {
+      try {
+        const res = await fetch(`${base}/chat/completions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(60000),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const text = data?.choices?.[0]?.message?.content;
+          if (!text) throw new Error("Respons LLM kosong.");
+          return String(text);
+        }
+        lastError = `Provider LLM mengembalikan ${res.status}: ${(await res.text()).slice(0, 200)}`;
+        // 429/529/5xx bersifat sementara — coba lagi, lalu pindah ke model cadangan.
+        if (res.status === 429 || res.status === 529 || res.status >= 500) {
+          await new Promise((r) => setTimeout(r, 900 * (attempt + 1)));
+          continue;
+        }
+        break; // error permanen (mis. 400/401/422)
+      } catch (e) {
+        // Timeout/jaringan putus juga bisa sementara — jangan langsung gagalkan permintaan.
+        lastError = `Gagal menghubungi provider LLM: ${(e as Error).message}`;
         await new Promise((r) => setTimeout(r, 900 * (attempt + 1)));
-        continue;
       }
-      break; // error permanen (mis. 400/401/422)
     }
   }
   throw new Error(lastError);
