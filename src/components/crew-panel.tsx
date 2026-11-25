@@ -102,8 +102,21 @@ export function CrewPanel({ projectId, write }: { projectId: string; write: bool
     } catch (e) { toast((e as Error).message, "error"); }
   }
 
+  async function resume() {
+    if (!status?.id) return;
+    setBusy(true);
+    try {
+      const r = await api<any>(`/api/projects/${projectId}/crew/${status.id}/approve`, { body: {} });
+      setRunId(status.id); setStatus({ ...r, plan: status.plan });
+      toast("Crew dilanjutkan otomatis dari rencana terakhir");
+      loadFiles();
+    } catch (e) { toast((e as Error).message, "error"); }
+    finally { setBusy(false); }
+  }
+
   const steps: any[] = plan?.plan?.steps ?? status?.plan?.steps ?? [];
   const actions: any[] = status?.actions ?? [];
+  const pendingApproval = status?.status === "PLANNED" || status?.status === "APPROVED";
   const byEmployee = useMemo(() => {
     const map: Record<string, string> = {};
     for (const a of actions) {
@@ -116,8 +129,8 @@ export function CrewPanel({ projectId, write }: { projectId: string; write: bool
   }, [actions]);
   const runningCount = steps.filter((s) => byEmployee[s.employeeId] === "RUNNING").length;
   const doneCount = steps.filter((s) => byEmployee[s.employeeId] === "DONE").length;
-  const statusTone = (s?: string) => s === "DONE" ? "bg-emerald-500/10 text-emerald-600" : s === "ERROR" ? "bg-red-500/10 text-red-600" : s === "RUNNING" ? "bg-violet-500/10 text-violet-600" : "bg-muted text-muted-foreground";
-  const statusLabel = (s?: string) => s === "DONE" ? "Selesai" : s === "ERROR" ? "Gagal" : s === "RUNNING" ? "Berjalan" : "Menunggu";
+  const statusTone = (s?: string) => s === "DONE" ? "bg-emerald-500/10 text-emerald-600" : s === "ERROR" || s === "FAILED" ? "bg-red-500/10 text-red-600" : s === "RUNNING" ? "bg-violet-500/10 text-violet-600" : s === "APPROVED" ? "bg-amber-500/10 text-amber-600" : "bg-muted text-muted-foreground";
+  const statusLabel = (s?: string) => s === "DONE" ? "Selesai" : s === "ERROR" || s === "FAILED" ? "Gagal" : s === "RUNNING" ? "Berjalan" : s === "APPROVED" ? "Siap jalan" : "Menunggu";
 
   const sandpackFiles = useMemo(() => {
     const out: Record<string, string> = {};
@@ -137,10 +150,13 @@ export function CrewPanel({ projectId, write }: { projectId: string; write: bool
           <div className="mb-5 rounded-xl border p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-sm font-medium">
-                {status.status === "RUNNING" ? <Loader2 className="h-4 w-4 animate-spin text-violet-500" /> : status.status === "DONE" ? <Check className="h-4 w-4 text-emerald-500" /> : <CircleAlert className="h-4 w-4 text-red-500" />}
-                {status.status === "RUNNING" ? `Crew berjalan · ${doneCount}/${steps.length} karyawan selesai` : status.status === "DONE" ? "Crew selesai" : "Crew terhenti"}
+                {status.status === "RUNNING" ? <Loader2 className="h-4 w-4 animate-spin text-violet-500" /> : status.status === "DONE" ? <Check className="h-4 w-4 text-emerald-500" /> : pendingApproval ? <Play className="h-4 w-4 text-amber-500" /> : <CircleAlert className="h-4 w-4 text-red-500" />}
+                {status.status === "RUNNING" ? `Crew berjalan · ${doneCount}/${steps.length} karyawan selesai` : status.status === "DONE" ? "Crew selesai" : pendingApproval ? (status.status === "APPROVED" ? "Siap dijalankan" : "Menunggu persetujuan") : "Crew terhenti"}
               </div>
-              <Badge className={statusTone(status.status)}>{statusLabel(status.status === "RUNNING" ? "RUNNING" : status.status === "DONE" ? "DONE" : "ERROR")}</Badge>
+              <div className="flex items-center gap-2">
+                {pendingApproval && write && <Button size="sm" variant="accent" loading={busy} onClick={resume}><Play className="h-3.5 w-3.5" />Lanjutkan crew</Button>}
+                <Badge className={statusTone(status.status)}>{statusLabel(status.status)}</Badge>
+              </div>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">{status.summary}</p>
             {status.error && <p className="mt-2 text-xs text-danger">{status.error}</p>}
