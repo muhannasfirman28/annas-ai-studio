@@ -199,20 +199,23 @@ async function sessionNote(sessionId) {
 }
 
 function buildStepPrompt(step, agent, brief) {
-  const files = step.files.map((f) => `- ${f.path}: ${f.purpose || "tanpa keterangan"}`).join("\n") || "- tidak ada file";
-  const extra = agent?.systemPrompt ? `\n\nInstruksi tambahan dari Settings Studio:\n${agent.systemPrompt.slice(0, 2000)}` : "";
+  const hasFiles = step.files.length > 0;
+  const files = step.files.map((f) => `- ${f.path}: ${f.purpose || "tanpa keterangan"}`).join("\n");
+  const extra = agent?.systemPrompt ? `\n\nInstruksi tambahan dari Settings Studio:\n${agent.systemPrompt.slice(0, 1200)}` : "";
+  const fileRule = hasFiles
+    ? `File yang harus dibuat/diperbarui dengan tool edit/write OpenCode:\n${files}\n\nBaca file yang sudah ada bila relevan, lalu tulis perubahan benar-benar ke workspace. Kode TypeScript/TSX harus valid. Teks UI dalam Bahasa Indonesia.`
+    : "Tidak ada file yang ditugaskan pada step ini. Jangan memanggil tool edit/write; langsung berikan catatan deliverable.";
   return [
     `Kamu adalah ${step.name}, ${step.title}. Fokusmu: ${step.focus}.`,
     "",
-    `Brief proyek:\n${brief.slice(0, 3000)}`,
+    `Brief proyek (ringkasan):\n${brief.slice(0, 1500)}`,
     "",
     `Tugas: ${step.task}.`,
     `Deskripsi: ${step.description}.`,
     "",
-    `File yang harus dibuat/diperbarui di workspace ini dengan tool edit/write OpenCode:\n${files}`,
+    fileRule,
     "",
-    "Sebelum menulis, baca file yang sudah ada bila relevan. Jangan hanya mengembalikan kode di chat — tulis benar-benar ke workspace. Kode TypeScript/TSX harus valid dan bisa di-build. Teks UI dalam Bahasa Indonesia.",
-    `Setelah selesai, balas HANYA catatan deliverable maksimal 1200 karakter diawali "NOTE:". Jangan mengulang isi file.${extra}`,
+    `Balas HANYA catatan deliverable maksimal 800 karakter diawali "NOTE:". Jangan mengulang isi file.${extra}`,
   ].join("\n");
 }
 
