@@ -126,7 +126,10 @@ async function main() {
     const email = `${e.key.replace("-", "")}@annasai.studio`;
     usr[e.key] = (await prisma.user.create({ data: { email, name: e.name, passwordHash: hash, role: e.role, employeeId: created.id } })).id;
     await prisma.aiAgentConfiguration.create({ data: {
-      employeeId: created.id, enabled: false,
+      employeeId: created.id, enabled: true,
+      provider: process.env.AI_PROVIDER || "nvidia",
+      model: process.env.AI_MODEL || "minimaxai/minimax-m3.1-flash",
+      temperature: 0.4,
       systemPrompt: `Kamu adalah ${e.name}, ${e.title} di Annas AI Studio. Kepribadian: ${e.personality} Gaya komunikasi: ${e.style} Tanggung jawab: ${e.resp} Jawab dalam Bahasa Indonesia, ringkas, dan sesuai peranmu.`,
     } });
   }
