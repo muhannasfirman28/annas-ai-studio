@@ -219,6 +219,15 @@ function buildStepPrompt(step, agent, brief) {
   ].join("\n");
 }
 
+async function deleteSession(sessionId) {
+  if (!sessionId) return;
+  try {
+    await opencodeFetch(`/api/session/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
+  } catch {
+    // best effort: session bisa sudah hilang setelah restart OpenCode.
+  }
+}
+
 async function createCoordinatorSession(runId, workspace, stepKey = "") {
   const res = await opencodeFetch("/api/session", {
     method: "POST",
@@ -238,14 +247,16 @@ async function createCoordinatorSession(runId, workspace, stepKey = "") {
   return String(id);
 }
 
-async function createChildSession(parentId, step) {
+async function createChildSession(parentId, step, agent) {
+  const configured = String(agent?.model || "");
+  const modelId = configured.includes("/") ? configured.slice(configured.indexOf("/") + 1) : MODEL_ID;
   const res = await opencodeFetch("/api/session", {
     method: "POST",
     body: JSON.stringify({
       parentID: parentId,
       agent: step.key,
       title: `Crew ${step.key}`,
-      model: { providerID: PROVIDER_ID, id: MODEL_ID },
+      model: { providerID: PROVIDER_ID, id: modelId },
       metadata: { stepKey: step.key, source: "annas-ai-studio" },
     }),
   });
@@ -259,7 +270,7 @@ async function createChildSession(parentId, step) {
 
 async function promptStep(runId, coordinatorId, step, agent, brief) {
   const startedAt = Date.now();
-  const childId = await createChildSession(coordinatorId, step);
+  const childId = await createChildSession(coordinatorId, step, agent);
   const res = await opencodeFetch(`/api/session/${encodeURIComponent(childId)}/prompt`, {
     method: "POST",
     body: JSON.stringify({
@@ -475,6 +486,8 @@ async function runStep(payload) {
     console.error(`[run ${runId}] ${step.key} gagal: ${message}`);
   } finally {
     if (workspace) await rm(workspace, { recursive: true, force: true }).catch(() => {});
+    // Hapus session OpenCode supaya request yang hang tidak mengunci worker.
+    await deleteSession(coordinatorId);
     // Clear dulu supaya callback yang memicu step berikutnya tidak kena 409.
     if (activeRunId === runId) activeRunId = null;
     if (activeStepKey === step.key) activeStepKey = null;
