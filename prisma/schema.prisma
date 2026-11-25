@@ -248,6 +248,7 @@ model CrewRun {
   createdAt    DateTime      @default(now())
 
   actions CrewRunAction[]
+  steps   CrewRunStep[]
 
   @@index([projectId, createdAt])
   @@map("crew_runs")
@@ -272,6 +273,29 @@ model CrewRunAction {
 
   @@index([runId, seq])
   @@map("crew_run_actions")
+}
+
+/** Bukti eksekusi satu karyawan sebagai subagent OpenCode. */
+model CrewRunStep {
+  id         String    @id @default(cuid())
+  runId      String
+  run        CrewRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  stepKey    String
+  agentId    String
+  sessionId  String?
+  parentId   String?
+  model      String?
+  status     String    @default("PENDING")
+  note       String?
+  error      String?
+  files      Json?
+  durationMs Int?
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@unique([runId, stepKey])
+  @@index([runId])
+  @@map("crew_run_steps")
 }
 
 // 7. project_members

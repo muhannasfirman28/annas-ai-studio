@@ -3,6 +3,7 @@ import { chatCompletion, llmConfigured } from "./llm";
 import { runTool } from "./agent-tools";
 import { templateFile } from "./crew-templates";
 import { listProjectFiles, readProjectFile } from "./project-files";
+import { crewEngine, startCrewOnWorker } from "./crew-client";
 import type { SessionUser } from "./auth";
 
 /** Orkestrator crew: satu karyawan selesai -> otomatis lanjut ke karyawan berikutnya. */
@@ -181,8 +182,8 @@ export async function createCrewRun(input: { projectId: string; brief: string; u
   return run;
 }
 
-/** Jalankan seluruh paket: tiap karyawan selesai -> lanjut otomatis ke karyawan berikutnya. */
-export async function executeCrewRun(input: { runId: string; user: SessionUser }) {
+/** Jalankan seluruh paket lewat panggilan LLM langsung (fallback/rollback). */
+async function executeCrewRunDirect(input: { runId: string; user: SessionUser }) {
   const run = await prisma.crewRun.findUnique({
     where: { id: input.runId },
     include: { project: { select: { id: true, name: true } }, actions: { orderBy: { seq: "asc" } } },
@@ -292,6 +293,87 @@ export async function executeCrewRun(input: { runId: string; user: SessionUser }
   }
 
   return { status: failed ? "FAILED" : "DONE", summary, files: files.map((f) => f.path), done, failed, error: lastError || null };
+}
+
+/** Kirim paket ke Crew Worker. Worker yang menjalankan delapan subagent OpenCode secara berurutan. */
+async function dispatchCrewRun(input: { runId: string; user: SessionUser }) {
+  const run = await prisma.crewRun.findUnique({
+    where: { id: input.runId },
+    include: { project: { select: { id: true, name: true } }, actions: { orderBy: { seq: "asc" } } },
+  });
+  if (!run) throw new Error("Crew run tidak ditemukan.");
+  if (run.status !== "PLANNED" && run.status !== "APPROVED") {
+    throw new Error(`Crew run sudah berstatus ${run.status} dan tidak bisa dijalankan ulang.`);
+  }
+
+  const plan = run.plan as unknown as CrewPlan;
+  const fileActions = run.actions.filter((a) => a.kind === "file");
+  const configs = await prisma.aiAgentConfiguration.findMany({
+    where: { employeeId: { in: plan.steps.map((s) => s.employeeId) } },
+  });
+  const configByEmployee = new Map(configs.map((c) => [c.employeeId, c]));
+
+  const steps = plan.steps.map((step) => ({
+    key: step.key,
+    name: step.name,
+    title: step.title,
+    focus: step.focus,
+    task: step.task,
+    description: step.description,
+    note: step.note,
+    employeeId: step.employeeId,
+    files: fileActions
+      .filter((a) => a.employeeId === step.employeeId)
+      .map((a) => {
+        const payload = a.payload as { path: string; purpose?: string };
+        return { path: payload.path, purpose: payload.purpose ?? "" };
+      }),
+  }));
+
+  const agents = plan.steps.map((step) => {
+    const cfg = configByEmployee.get(step.employeeId);
+    return {
+      employeeId: step.employeeId,
+      name: step.name,
+      model: cfg?.model || "minimaxai/minimax-m3.1-flash",
+      systemPrompt: cfg?.systemPrompt || "",
+      enabled: cfg?.enabled ?? false,
+    };
+  });
+
+  await prisma.crewRun.update({
+    where: { id: run.id },
+    data: { status: "RUNNING", approvedById: input.user.id, approvedAt: new Date(), startedAt: new Date() },
+  });
+
+  try {
+    await startCrewOnWorker({
+      runId: run.id,
+      brief: plan.brief,
+      projectName: run.project.name,
+      steps,
+      agents,
+      files: fileActions.map((a) => (a.payload as { path: string }).path),
+    });
+    return {
+      status: "RUNNING" as const,
+      summary: `Crew berjalan di OpenCode: ${plan.steps.length} karyawan · ${fileActions.length} file.`,
+      files: fileActions.map((a) => (a.payload as { path: string }).path),
+      done: 0, failed: 0, error: null,
+    };
+  } catch (e) {
+    const message = (e instanceof Error ? e.message : String(e)).slice(0, 500);
+    await prisma.crewRun.update({
+      where: { id: run.id },
+      data: { status: "FAILED", summary: `Gagal memulai Crew Worker: ${message}`, finishedAt: new Date() },
+    });
+    throw e;
+  }
+}
+
+/** Satu klik approve: pilih engine berdasarkan CREW_ENGINE. */
+export async function executeCrewRun(input: { runId: string; user: SessionUser }) {
+  return crewEngine() === "opencode" ? dispatchCrewRun(input) : executeCrewRunDirect(input);
 }
 
 export async function crewStatus(runId: string) {
