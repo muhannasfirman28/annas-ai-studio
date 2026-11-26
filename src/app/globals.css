@@ -55,7 +55,7 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
 .org ul ul::before { content: ""; position: absolute; top: 0; left: 50%; height: 22px; border-left: 1.5px solid hsl(var(--border)); }
 .org > ul { padding-top: 0; }
 
-/* Kantor Virtual (plugin) */
+/* Kantor Virtual (plugin) — ruangan dengan jalur jalan */
 .office-floor {
   position: relative;
   isolation: isolate;
@@ -104,43 +104,73 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
 }
 .office-pendant-a { left: 22%; }
 .office-pendant-b { right: 22%; }
-.office-coffee {
+
+/* Zona tujuan: ruang meeting & sudut kopi */
+.office-zone {
   position: absolute;
-  right: 18px;
-  bottom: 18px;
-  z-index: 4;
-  display: flex;
-  height: 30px;
-  width: 30px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(255, 255, 255, .2);
-  border-radius: 8px;
-  background: rgba(15, 23, 42, .78);
-  color: #e2e8f0;
-}
-.office-desks {
-  position: relative;
   z-index: 2;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
-  gap: 26px 14px;
-}
-.office-desk {
-  position: relative;
   display: flex;
-  min-width: 0;
   flex-direction: column;
   align-items: center;
-  padding-top: 30px;
-  border-radius: 16px;
+  gap: 5px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
-.office-desk-active { background: linear-gradient(180deg, rgba(56, 189, 248, .16), transparent 72%); }
-.office-monitor {
-  position: relative;
-  z-index: 0;
-  height: 52px;
+.office-zone-label {
+  border: 1px solid rgba(226, 232, 240, .18);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, .8);
+  padding: 2px 9px;
+  color: #e2e8f0;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .04em;
+}
+.office-meeting-table {
+  display: flex;
   width: 92px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 18px 18px 8px 8px;
+  background: linear-gradient(180deg, #9a7556, #6b4d38);
+  box-shadow: 0 10px 18px rgba(0, 0, 0, .3), inset 0 2px 0 rgba(255, 255, 255, .12);
+}
+.office-meeting-table i { width: 16px; height: 16px; border-radius: 50%; background: #dbe4ef; opacity: .65; }
+.office-coffee-machine {
+  display: flex;
+  height: 34px;
+  width: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(251, 191, 36, .45);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, .85);
+  color: #fbbf24;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, .28);
+}
+
+/* Meja tetap di ruangan; karyawan bergerak di atasnya */
+.office-desk-furniture {
+  position: absolute;
+  z-index: 3;
+  width: 96px;
+  height: 92px;
+  transform: translate(-50%, -58%);
+  border-radius: 16px;
+  transition: background .2s ease;
+  pointer-events: none;
+}
+.office-desk-active { background: linear-gradient(180deg, rgba(56, 189, 248, .18), transparent 72%); }
+.office-monitor {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 0;
+  height: 50px;
+  width: 90px;
+  transform: translateX(-50%);
   border: 6px solid #1e293b;
   border-bottom: 0;
   border-radius: 10px 10px 3px 3px;
@@ -172,13 +202,15 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
   background: #334155;
 }
 .office-keyboard {
-  position: relative;
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
   z-index: 4;
   display: flex;
   gap: 2px;
   height: 8px;
   width: 70px;
-  margin-top: -6px;
+  transform: translateX(-50%);
   padding: 2px;
   border-radius: 4px 4px 7px 7px;
   background: #cbd5e1;
@@ -187,8 +219,8 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
 .office-keyboard i { width: 8px; height: 3px; border-radius: 1px; background: #64748b; }
 .office-mug {
   position: absolute;
-  right: calc(50% - 62px);
-  bottom: 26px;
+  right: 2px;
+  bottom: 22px;
   z-index: 4;
   width: 12px;
   height: 13px;
@@ -207,7 +239,14 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
   border-left: 0;
   border-radius: 0 6px 6px 0;
 }
-.office-chair {
+
+/* Aktor: posisi left/top dianimasikan oleh Motion */
+.office-actor {
+  position: absolute;
+  width: 78px;
+  transform: translate(-50%, -46%);
+}
+.office-actor .office-chair {
   position: absolute;
   top: 42px;
   left: 50%;
@@ -219,7 +258,7 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
   background: linear-gradient(180deg, #334155, #1e293b);
   box-shadow: 0 8px 16px rgba(0, 0, 0, .28);
 }
-.office-chair::after {
+.office-actor .office-chair::after {
   content: "";
   position: absolute;
   left: 50%;
@@ -310,6 +349,8 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
 .office-arm-typing.office-arm-right { animation: office-type-right .38s ease-in-out infinite alternate; }
 .office-arm-reading.office-arm-left { transform: rotate(38deg); }
 .office-arm-reading.office-arm-right { transform: rotate(-38deg); }
+.office-arm-walking.office-arm-left { animation: office-walk-arm-left .42s ease-in-out infinite alternate; }
+.office-arm-walking.office-arm-right { animation: office-walk-arm-right .42s ease-in-out infinite alternate; }
 .office-hand {
   position: absolute;
   left: 50%;
@@ -322,6 +363,32 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
 }
 @keyframes office-type-left { from { transform: rotate(18deg); } to { transform: rotate(-12deg); } }
 @keyframes office-type-right { from { transform: rotate(-18deg); } to { transform: rotate(12deg); } }
+@keyframes office-walk-arm-left { from { transform: rotate(34deg); } to { transform: rotate(-26deg); } }
+@keyframes office-walk-arm-right { from { transform: rotate(-34deg); } to { transform: rotate(26deg); } }
+
+/* Kaki bergerak saat jalan */
+.office-legs {
+  position: absolute;
+  left: 50%;
+  bottom: -14px;
+  z-index: 2;
+  display: flex;
+  gap: 8px;
+  transform: translateX(-50%);
+}
+.office-leg {
+  width: 7px;
+  height: 16px;
+  border-radius: 3px 3px 4px 4px;
+  background: var(--person);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .28);
+  transform-origin: top center;
+}
+.office-walking .office-leg:first-child { animation: office-step-left .44s ease-in-out infinite alternate; }
+.office-walking .office-leg:last-child { animation: office-step-right .44s ease-in-out infinite alternate; }
+@keyframes office-step-left { from { transform: rotate(26deg) translateY(0); } to { transform: rotate(-20deg) translateY(-3px); } }
+@keyframes office-step-right { from { transform: rotate(-20deg) translateY(-3px); } to { transform: rotate(26deg) translateY(0); } }
+
 .office-laptop {
   position: absolute;
   left: 50%;
@@ -333,6 +400,7 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
   border-radius: 3px 3px 6px 6px;
   background: #94a3b8;
   box-shadow: 0 6px 8px rgba(0, 0, 0, .3);
+  transition: opacity .2s ease, transform .2s ease;
 }
 .office-laptop-screen {
   position: absolute;
@@ -341,6 +409,10 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
   background: linear-gradient(135deg, #38bdf8, #2563eb);
   opacity: .8;
 }
+.office-laptop-hidden { opacity: 0; transform: translateX(-50%) perspective(60px) rotateX(52deg) scale(.5); }
+.office-facing-left .office-person { transform: scaleX(-1); }
+
+/* Bubble aktivitas / obrolan */
 .office-chat-anchor {
   position: absolute;
   left: 50%;
@@ -378,6 +450,16 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
   border-bottom: 1px solid rgba(255, 255, 255, .2);
   background: rgba(15, 23, 42, .92);
 }
+.office-action-bubble {
+  border-color: rgba(56, 189, 248, .5);
+  border-radius: 10px;
+  background: rgba(30, 41, 59, .96);
+  font-weight: 600;
+}
+.office-action-bubble::after {
+  border-color: rgba(56, 189, 248, .5);
+  background: rgba(30, 41, 59, .96);
+}
 .office-chat-emoji { margin-right: 4px; }
 .office-nameplate {
   position: relative;
@@ -398,10 +480,14 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
   box-shadow: 0 6px 14px rgba(0, 0, 0, .24);
 }
 .office-desk-active .office-nameplate { border-color: rgba(56, 189, 248, .8); }
+
 @media (max-width: 640px) {
-  .office-floor { min-height: 520px; padding: 60px 10px 24px; }
-  .office-desks { gap: 22px 4px; }
-  .office-chat-bubble { max-width: 120px; font-size: 10px; }
+  .office-floor { min-height: 600px; padding: 58px 8px 20px; }
+  .office-actor { width: 64px; }
+  .office-desk-furniture { width: 76px; height: 78px; }
+  .office-monitor { width: 72px; height: 42px; }
+  .office-meeting-table { width: 76px; }
+  .office-chat-bubble { max-width: 116px; font-size: 10px; }
+  .office-zone-label { font-size: 8px; }
   .office-sign small { display: none; }
-  .office-monitor { width: 76px; }
 }

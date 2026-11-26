@@ -17,15 +17,17 @@ function loopFor(activity: OfficeActivity, frozen: boolean, index: number) {
   if (frozen || activity === "offline") return { animate: {}, transition: {} };
   const animate =
     activity === "walking"
-      ? { x: [0, -24, -48, -24, 0], y: [0, -4, -4, -4, 0], rotate: [0, -3, 0, 3, 0] }
+      ? { y: [0, -3, 0, -3, 0], rotate: [0, -2, 0, 2, 0] }
       : activity === "focus"
         ? { y: [0, -2, 0, -1, 0], rotate: [0, 0.6, 0, -0.6, 0] }
         : activity === "reading"
           ? { rotate: [0, -2, 0, 2, 0] }
-          : { x: [0, 1.5, 0, -1.5, 0], y: [0, -1, 0, 0, 0] };
+          : activity === "talking"
+            ? { rotate: [0, -4, 0, 4, 0], y: [0, -1, 0, -1, 0] }
+            : { x: [0, 1.5, 0, -1.5, 0], y: [0, -1, 0, 0, 0] };
   const transition =
     activity === "walking"
-      ? { duration: 10, repeat: Infinity, ease: "easeInOut" as const, delay: index * 0.45, repeatDelay: 1.5 }
+      ? { duration: 1.4, repeat: Infinity, ease: "easeInOut" as const, delay: index * 0.12 }
       : { duration: 3.4, repeat: Infinity, ease: "easeInOut" as const, delay: index * 0.25, repeatDelay: 0.3 };
   return { animate, transition };
 }
@@ -36,8 +38,11 @@ export function OfficeCharacter({
   activity,
   frozen,
   selected,
+  walking,
+  facing,
   message,
   emoji,
+  action,
   onSelect,
   onHover,
 }: {
@@ -46,8 +51,11 @@ export function OfficeCharacter({
   activity: OfficeActivity;
   frozen: boolean;
   selected: boolean;
+  walking: boolean;
+  facing: "left" | "right" | "front";
   message?: string;
   emoji?: string;
+  action?: { emoji: string; label: string };
   onSelect: (id: string) => void;
   onHover: (id: string | null) => void;
 }) {
@@ -59,13 +67,20 @@ export function OfficeCharacter({
     "--hair": HAIR_TONES[index % HAIR_TONES.length],
   } as CSSProperties;
 
+  // Saat bergerak, label aktivitas yang tampil. Saat duduk, obrolan simulasi yang tampil.
+  const bubble = action
+    ? { key: `${employee.id}:action:${action.label}`, emoji: action.emoji, text: action.label, kind: "action" as const }
+    : message
+      ? { key: `${employee.id}:chat:${message}`, emoji: emoji ?? "", text: message, kind: "chat" as const }
+      : null;
+
   return (
     <motion.div variants={ENTRANCE} className={cn("relative flex w-full min-w-0 flex-col items-center", selected && "z-10")}>
       <motion.button
         type="button"
-        aria-label={`${employee.name}, ${employee.title}. ${ACTIVITY_LABEL[activity]}${message ? `. Obrolan simulasi: ${message}` : ""}.`}
+        aria-label={`${employee.name}, ${employee.title}. ${ACTIVITY_LABEL[activity]}${action ? `. ${action.label}` : ""}${message ? `. Obrolan simulasi: ${message}` : ""}.`}
         aria-pressed={selected}
-        title={`${employee.name} — ${ACTIVITY_LABEL[activity]}`}
+        title={`${employee.name} — ${ACTIVITY_LABEL[activity]}${action ? ` · ${action.label}` : ""}`}
         onClick={() => onSelect(employee.id)}
         onMouseEnter={() => onHover(employee.id)}
         onMouseLeave={() => onHover(null)}
@@ -78,11 +93,12 @@ export function OfficeCharacter({
         className={cn(
           "group relative flex flex-col items-center rounded-xl px-2 pb-1 pt-2 outline-none transition-colors",
           selected ? "bg-electric/10 ring-2 ring-electric/60" : "hover:bg-white/5",
+          facing === "left" && "office-facing-left",
           activity === "offline" && "opacity-45",
         )}
       >
         <span className="office-chair" aria-hidden="true" />
-        <span className="office-person" style={style} aria-hidden="true">
+        <span className={cn("office-person", walking && !frozen && "office-walking")} style={style} aria-hidden="true">
           <span className="office-person-head">
             {employee.avatarUrl ? (
               <img src={employee.avatarUrl} alt="" className="h-full w-full rounded-[46%] object-cover" />
@@ -100,24 +116,25 @@ export function OfficeCharacter({
           <span className="office-person-neck" />
           <span className="office-person-body">
             <span className="office-collar" />
-            <span className={cn("office-person-arm office-arm-left", !frozen && activity === "typing" && "office-arm-typing")}><span className="office-hand" /></span>
-            <span className={cn("office-person-arm office-arm-right", !frozen && activity === "reading" && "office-arm-reading")}><span className="office-hand" /></span>
+            <span className={cn("office-person-arm office-arm-left", !frozen && activity === "typing" && "office-arm-typing", !frozen && walking && "office-arm-walking")}><span className="office-hand" /></span>
+            <span className={cn("office-person-arm office-arm-right", !frozen && activity === "reading" && "office-arm-reading", !frozen && walking && "office-arm-walking")}><span className="office-hand" /></span>
           </span>
-          <span className="office-laptop"><span className="office-laptop-screen" /></span>
+          <span className="office-legs"><span className="office-leg" /><span className="office-leg" /></span>
+          <span className={cn("office-laptop", walking && "office-laptop-hidden")}><span className="office-laptop-screen" /></span>
         </span>
 
         <span className="office-chat-anchor" aria-hidden="true">
           <AnimatePresence mode="wait">
-            {message ? (
+            {bubble ? (
               <motion.span
-                key={`${employee.id}:${message}`}
-                className="office-chat-bubble"
+                key={bubble.key}
+                className={cn("office-chat-bubble", bubble.kind === "action" && "office-action-bubble")}
                 initial={frozen ? false : { opacity: 0, y: 8, scale: 0.94 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={frozen ? undefined : { opacity: 0, y: -6, scale: 0.96 }}
                 transition={{ duration: frozen ? 0 : 0.24, ease: "easeOut" }}
               >
-                <span className="office-chat-emoji">{emoji}</span>{message}
+                <span className="office-chat-emoji">{bubble.emoji}</span>{bubble.text}
               </motion.span>
             ) : null}
           </AnimatePresence>

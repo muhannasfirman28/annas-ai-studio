@@ -3,13 +3,23 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
-import { Building2, Coffee, MessageCircle, Pause, Play } from "lucide-react";
+import { Building2, Coffee, MessageCircle, Pause, Play, Users } from "lucide-react";
 import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, PageHeader, PageLoading, Select } from "@/components/ui";
 import { useApi } from "@/lib/client";
 import { AVAIL_DOT, AVAIL_LABEL, cn } from "@/lib/utils";
 import { OfficeBackdrop } from "./office-backdrop";
 import { OfficeCharacter } from "./office-character";
-import { ACTIVITY_LABEL, activityFor, officeChat, officeChatFeed, type OfficeEmployee } from "./office-types";
+import {
+  ACTIVITY_LABEL,
+  COFFEE_SPOT,
+  DESK_SPOTS,
+  MEETING_SPOT,
+  activityFor,
+  movementFor,
+  officeChat,
+  officeChatFeed,
+  type OfficeEmployee,
+} from "./office-types";
 
 type EmployeesResponse = { employees: OfficeEmployee[] };
 
@@ -21,7 +31,7 @@ export function OfficePlugin() {
   const [department, setDepartment] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const [chatTick, setChatTick] = useState(0);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     const sync = () => setVisible(document.visibilityState === "visible");
@@ -36,21 +46,29 @@ export function OfficePlugin() {
   const selected = employees.find((e) => e.id === selectedId) ?? null;
   const frozen = paused || Boolean(reduceMotion) || !visible;
 
+  // Satu putaran menggerakkan rute jalan sekaligus mengganti obrolan.
   useEffect(() => {
     if (frozen) return;
-    const id = window.setInterval(() => setChatTick((tick) => tick + 1), 4200);
+    const id = window.setInterval(() => setTick((value) => value + 1), 3600);
     return () => window.clearInterval(id);
   }, [frozen]);
 
-  const chat = useMemo(() => officeChat(shown, chatTick), [shown, chatTick]);
-  const chatFeed = useMemo(() => officeChatFeed(shown, chatTick), [shown, chatTick]);
+  const movements = useMemo(
+    () => shown.map((employee, index) => ({ employee, index, move: movementFor(employee, index, tick) })),
+    [shown, tick],
+  );
+  const chat = useMemo(() => officeChat(shown, tick), [shown, tick]);
+  const chatFeed = useMemo(() => officeChatFeed(shown, tick), [shown, tick]);
   const chatBySpeaker = useMemo(() => new Map(chat.map((line) => [line.speakerId, line])), [chat]);
+
+  const selectedIndex = Math.max(0, shown.findIndex((e) => e.id === selectedId));
+  const selectedActivity = selected ? movementFor(selected, selectedIndex, tick).activity : null;
 
   return (
     <div className="animate-in space-y-5">
       <PageHeader
         title="Kantor Virtual"
-        subtitle="Visualisasi animasi tim Annas AI Studio saat bekerja. Obrolan dan gerakan adalah simulasi visual."
+        subtitle="Visualisasi animasi tim Annas AI Studio di dalam ruangan. Karyawan berjalan antar meja, sudut kopi, dan ruang meeting. Semua gerakan serta obrolan adalah simulasi visual."
         actions={<>
           <Badge className="border border-electric/30 bg-electric/10 text-electric">Simulasi visual</Badge>
           <Button variant="outline" size="sm" onClick={() => setPaused((v) => !v)} aria-pressed={paused}>
@@ -67,7 +85,7 @@ export function OfficePlugin() {
             <Card className="overflow-hidden p-0">
               <CardHeader
                 title="Lantai kerja"
-                subtitle={`${shown.length} karyawan tampil — obrolan dan gerakan adalah simulasi, bukan pemantauan langsung.`}
+                subtitle={`${shown.length} karyawan bergerak di ruangan — simulasi, bukan pemantauan langsung.`}
                 action={<Select aria-label="Filter divisi" value={department} onChange={(e) => setDepartment(e.target.value)} className="h-8 w-44 text-[13px]">
                   <option value="">Semua divisi</option>
                   {departments.map((d) => <option key={d} value={d}>{d}</option>)}
@@ -78,39 +96,70 @@ export function OfficePlugin() {
                 <div className="office-sign"><span>ANNAS AI STUDIO</span><small>Team Workspace · Simulasi langsung</small></div>
                 <div className="office-pendant office-pendant-a" aria-hidden="true" />
                 <div className="office-pendant office-pendant-b" aria-hidden="true" />
-                <div className="office-coffee" title="Mesin kopi" aria-hidden="true"><Coffee className="h-3.5 w-3.5" /></div>
+
+                <div className="office-zone office-zone-meeting" style={{ left: `${MEETING_SPOT.x}%`, top: `${MEETING_SPOT.y + 6}%` }} aria-hidden="true">
+                  <span className="office-meeting-table"><i /><i /><i /></span>
+                  <span className="office-zone-label">Ruang meeting</span>
+                </div>
+                <div className="office-zone office-zone-coffee" style={{ left: `${COFFEE_SPOT.x}%`, top: `${COFFEE_SPOT.y + 7}%` }} aria-hidden="true">
+                  <span className="office-coffee-machine"><Coffee className="h-4 w-4" /></span>
+                  <span className="office-zone-label">Sudut kopi</span>
+                </div>
+
                 {shown.length === 0 ? (
                   <div className="relative z-10 flex h-64 items-center justify-center text-sm text-white/80">Tidak ada karyawan di divisi ini.</div>
                 ) : (
-                  <motion.div
-                    className="office-desks"
-                    initial="hidden"
-                    animate="visible"
-                    variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
-                  >
-                    {shown.map((employee, index) => {
-                      const activity = activityFor(employee, index);
+                  <>
+                    {movements.map(({ employee, index }) => {
+                      const spot = DESK_SPOTS[index % DESK_SPOTS.length];
+                      return (
+                        <div
+                          key={`desk-${employee.id}`}
+                          className={cn("office-desk-furniture", (hoveredId === employee.id || selectedId === employee.id) && "office-desk-active")}
+                          style={{ left: `${spot.x}%`, top: `${spot.y}%` }}
+                          aria-hidden="true"
+                        >
+                          <span className="office-monitor"><span className="office-monitor-screen"><i /><i /><i /></span><span className="office-monitor-stand" /></span>
+                          <span className="office-keyboard"><i /><i /><i /><i /><i /><i /></span>
+                          <span className="office-mug" />
+                        </div>
+                      );
+                    })}
+
+                    {movements.map(({ employee, index, move }) => {
                       const line = chatBySpeaker.get(employee.id);
                       return (
-                        <div key={employee.id} className={cn("office-desk", hoveredId === employee.id && "office-desk-active")}>
-                          <div className="office-monitor" aria-hidden="true"><span className="office-monitor-screen"><i /><i /><i /></span><span className="office-monitor-stand" /></div>
+                        <motion.div
+                          key={employee.id}
+                          className="office-actor"
+                          style={{ zIndex: move.walking ? 7 : 5 }}
+                          initial={{ left: `${move.x}%`, top: `${move.y}%`, opacity: 0, scale: 0.82 }}
+                          animate={{ left: `${move.x}%`, top: `${move.y}%`, opacity: 1, scale: 1 }}
+                          transition={{
+                            left: { duration: frozen ? 0 : 2.6, ease: "easeInOut" },
+                            top: { duration: frozen ? 0 : 2.6, ease: "easeInOut" },
+                            opacity: { duration: 0.3 },
+                            scale: { duration: 0.3 },
+                          }}
+                        >
                           <OfficeCharacter
                             employee={employee}
                             index={index}
-                            activity={activity}
+                            activity={move.activity}
                             frozen={frozen}
                             selected={selectedId === employee.id}
-                            message={line?.text}
+                            walking={move.walking}
+                            facing={move.facing}
+                            action={move.action}
+                            message={move.action ? undefined : line?.text}
                             emoji={line?.emoji}
                             onSelect={(id) => setSelectedId((cur) => (cur === id ? null : id))}
                             onHover={setHoveredId}
                           />
-                          <div className="office-keyboard" aria-hidden="true"><i /><i /><i /><i /><i /><i /></div>
-                          <div className="office-mug" aria-hidden="true" />
-                        </div>
+                        </motion.div>
                       );
                     })}
-                  </motion.div>
+                  </>
                 )}
               </div>
             </Card>
@@ -148,10 +197,9 @@ export function OfficePlugin() {
               </Card>
 
               <Card>
-                <CardHeader title="Daftar tim" subtitle="Klik nama untuk menyorot meja mereka." />
+                <CardHeader title="Daftar tim" subtitle="Klik nama untuk menyorot karyawan di ruangan." />
                 <div className="max-h-[280px] space-y-1 overflow-y-auto p-3">
-                  {shown.map((employee, index) => {
-                    const activity = activityFor(employee, index);
+                  {movements.map(({ employee, index, move }) => {
                     const status = employee.availability ?? "AVAILABLE";
                     return (
                       <button key={employee.id} type="button" onClick={() => setSelectedId(employee.id)} onMouseEnter={() => setHoveredId(employee.id)} onMouseLeave={() => setHoveredId(null)}
@@ -161,7 +209,9 @@ export function OfficePlugin() {
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-[13px] font-medium">{employee.name}</span>
-                          <span className="block truncate text-[11px] text-muted-foreground">{ACTIVITY_LABEL[activity]}</span>
+                          <span className="block truncate text-[11px] text-muted-foreground">
+                            {ACTIVITY_LABEL[move.activity]}{move.action ? ` · ${move.action.label}` : ""}
+                          </span>
                         </span>
                         <MessageCircle className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground", chatBySpeaker.has(employee.id) && "text-electric")} aria-hidden="true" />
                         <span className={cn("h-2 w-2 shrink-0 rounded-full", AVAIL_DOT[status] ?? AVAIL_DOT.AVAILABLE)} title={AVAIL_LABEL[status] ?? status} aria-label={AVAIL_LABEL[status] ?? status} />
@@ -177,14 +227,19 @@ export function OfficePlugin() {
                   <div className="space-y-2 px-5 pb-5 text-[13px]">
                     <div className="flex justify-between gap-3"><span className="text-muted-foreground">Divisi</span><span>{selected.department?.name ?? "—"}</span></div>
                     <div className="flex justify-between gap-3"><span className="text-muted-foreground">Status</span><span>{AVAIL_LABEL[selected.availability ?? "AVAILABLE"] ?? selected.availability}</span></div>
-                    <div className="flex justify-between gap-3"><span className="text-muted-foreground">Aktivitas</span><span>{ACTIVITY_LABEL[activityFor(selected, Math.max(0, shown.findIndex((e) => e.id === selected.id)))]}</span></div>
-                    <p className="rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">Gerakan dan obrolan di lantai kerja hanya simulasi visual. Status diambil dari data karyawan.</p>
+                    <div className="flex justify-between gap-3"><span className="text-muted-foreground">Aktivitas</span><span>{selectedActivity ? ACTIVITY_LABEL[selectedActivity] : "—"}</span></div>
+                    <p className="rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">Rute jalan, aktivitas, dan obrolan di ruangan hanya simulasi visual. Status diambil dari data karyawan.</p>
                     <Link href={`/employees/${selected.id}`} className="inline-flex h-9 w-full items-center justify-center rounded-lg bg-electric px-4 font-medium text-white transition-opacity hover:opacity-90">Lihat profil karyawan</Link>
                   </div>
                 </Card>
               ) : (
-                <Card className="p-5 text-[13px] text-muted-foreground">Pilih seorang karyawan di lantai kerja atau daftar tim untuk melihat detailnya.</Card>
+                <Card className="p-5 text-[13px] text-muted-foreground">Pilih seorang karyawan di ruangan atau daftar tim untuk melihat detailnya.</Card>
               )}
+
+              <Card className="p-4">
+                <p className="flex items-center gap-2 text-[12px] font-medium"><Users className="h-4 w-4 text-electric" /> Rute simulasi</p>
+                <p className="mt-1 text-[12px] text-muted-foreground">Meja kerja → sudut kopi → ruang meeting → kembali ke meja. Setiap karyawan punya jadwal yang di-offset agar tidak berjalan bersamaan.</p>
+              </Card>
             </div>
           </div>
         </MotionConfig>
