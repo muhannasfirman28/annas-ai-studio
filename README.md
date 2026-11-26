@@ -27,7 +27,13 @@ Skema: `prisma/schema.prisma`. SQL migrasi: `prisma/migrations/0001_init/migrati
 
 ## Fitur
 
-Dashboard (statistik dari data nyata), Karyawan (card/tabel, filter, CRUD, detail), Struktur organisasi interaktif, Tugas (Kanban drag & drop, tabel, kalender, list; delegasi multi-penanggung jawab, checklist, lampiran, komentar, riwayat), Proyek (milestone, tim, progress), Kolaborasi (chat per umum/proyek/divisi, @mention, instruksi → tugas, ringkasan), Laporan (harian/mingguan/bulanan, analitik, ekspor PDF & Excel), Notifikasi, Pengaturan (perusahaan, tema, role & permission, pengguna, agent AI, keamanan).
+Dashboard (statistik dari data nyata), Karyawan (card/tabel, filter, CRUD, detail), Struktur organisasi interaktif, Tugas (Kanban drag & drop, tabel, kalender, list; delegasi multi-penanggung jawab, checklist, lampiran, komentar, riwayat), Proyek (milestone, tim, progress), Kolaborasi (chat per umum/proyek/divisi, @mention, instruksi → tugas, ringkasan), Laporan (harian/mingguan/bulanan, analitik, ekspor PDF & Excel), Notifikasi, Pengaturan (perusahaan, tema, role & permission, pengguna, agent AI, keamanan), **Plugin** (modul tambahan yang bisa diaktifkan).
+
+## Sistem Plugin
+
+Plugin didefinisikan oleh manifest di `src/lib/plugins/registry.ts` (metadata: id, nama, rute, izin, status default) dan komponen UI di `src/components/plugins/registry.tsx`. Status aktif/disimpan di tabel `plugin_settings` (migrasi `0006`) dan diatur lewat **Pengaturan → Plugin** (butuh `settings.write`). Menu sidebar dan rute `/plugins/[slug]` mengikuti status tersebut: plugin nonaktif membuat rutenya 404. Kode JS tidak pernah dimuat dari database — hanya manifest yang dikenal yang bisa dipasang.
+
+Plugin bawaan pertama: **Kantor Virtual** (`/plugins/office`). Plugin ini memakai `motion` (React) untuk menampilkan karyawan dari data nyata (`/api/employees`) duduk di meja, mengetik, membaca, fokus, atau jalan sebentar. Nama, jabatan, divisi, warna, dan status availability berasal dari database; **gerakan bekerja murni simulasi visual**, bukan pemantauan langsung. Animasi berhenti saat tab tidak aktif, saat tombol Jeda ditekan, atau saat pengguna memilih reduced motion.
 
 **Skor produktivitas** dihitung hanya dari tugas: tugas selesai tepat waktu ÷ (tugas selesai ber-deadline + tugas yang lewat deadline). Tanpa data tampil “—”.
 

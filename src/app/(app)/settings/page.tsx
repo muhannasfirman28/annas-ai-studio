@@ -2,10 +2,11 @@
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Bot, Building2, KeyRound, Palette, Plus, ShieldCheck, Trash2, Users } from "lucide-react";
+import { Bot, Building2, KeyRound, Palette, Plus, Puzzle, ShieldCheck, Trash2, Users } from "lucide-react";
 import { api, useApi } from "@/lib/client";
 import { Avatar, Badge, Button, Card, CardHeader, ConfirmDialog, ErrorState, Field, Input, Modal, PageHeader, PageLoading, Select, Textarea, useToast } from "@/components/ui";
 import { useApp } from "@/components/app-context";
+import { PluginSettings } from "@/components/plugin-settings";
 import { ROLE_LABEL, cn, fmtDate } from "@/lib/utils";
 
 const NOTIF: Record<string, string> = { TASK_ASSIGNED: "Tugas baru", DEADLINE_CHANGED: "Perubahan deadline", TASK_COMPLETED: "Tugas selesai", TASK_OVERDUE: "Tugas terlambat", NEW_COMMENT: "Komentar baru / mention", NEW_REPORT: "Laporan baru", NEW_PROJECT: "Proyek baru", REVIEW_REQUESTED: "Permintaan review" };
@@ -14,7 +15,7 @@ function SettingsInner() {
   const { can } = useApp(); const sp = useSearchParams();
   const company = can("settings.read"); const manage = can("users.manage");
   const tabs = [
-    ...(company ? [{ k: "company", l: "Perusahaan", i: Building2 }, { k: "visual", l: "Visual & tema", i: Palette }, { k: "notif", l: "Notifikasi", i: KeyRound }] : []),
+    ...(company ? [{ k: "company", l: "Perusahaan", i: Building2 }, { k: "visual", l: "Visual & tema", i: Palette }, { k: "plugins", l: "Plugin", i: Puzzle }, { k: "notif", l: "Notifikasi", i: KeyRound }] : []),
     ...(manage ? [{ k: "users", l: "Pengguna & role", i: Users }] : []),
     ...(company ? [{ k: "ai", l: "Integrasi & AI", i: Bot }] : []),
     { k: "security", l: "Keamanan", i: ShieldCheck },
@@ -27,7 +28,7 @@ function SettingsInner() {
       <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
         <nav className="flex gap-1 overflow-x-auto lg:flex-col" aria-label="Pengaturan">{tabs.map((t) => <button key={t.k} onClick={() => setTab(t.k)} aria-current={tab === t.k} className={cn("flex items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium", tab === t.k ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}><t.i className="h-4 w-4" />{t.l}</button>)}</nav>
         <div className="min-w-0">
-          {tab === "security" ? <Security /> : loading && !data ? <PageLoading /> : error || !data ? <ErrorState message={error ?? "Gagal memuat"} onRetry={reload} /> :
+          {tab === "security" ? <Security /> : tab === "plugins" ? <PluginSettings /> : loading && !data ? <PageLoading /> : error || !data ? <ErrorState message={error ?? "Gagal memuat"} onRetry={reload} /> :
             tab === "company" ? <CompanyTab d={data} reload={reload} /> : tab === "visual" ? <VisualTab d={data} reload={reload} /> : tab === "notif" ? <NotifTab d={data} reload={reload} /> :
             tab === "users" ? <UsersTab d={data} reload={reload} /> : <AiTab d={data} reload={reload} />}
         </div>

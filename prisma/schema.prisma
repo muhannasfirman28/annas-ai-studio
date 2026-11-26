@@ -527,6 +527,16 @@ model AiAgentConfiguration {
   @@map("ai_agent_configurations")
 }
 
+// 19. plugin_settings — status aktif plugin (manifest tetap disimpan di kode)
+model PluginSetting {
+  pluginId    String   @id
+  enabled     Boolean  @default(true)
+  installedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("plugin_settings")
+}
+
 // Log aktivitas umum untuk dashboard & riwayat karyawan
 model ActivityLog {
   id         String    @id @default(cuid())

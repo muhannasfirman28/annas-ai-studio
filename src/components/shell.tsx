@@ -7,7 +7,9 @@ import { Bell, Briefcase, CheckCheck, ChevronRight, FolderKanban, LayoutDashboar
 import { AppCtx, makeCan, type Me } from "./app-context";
 import { Avatar, Badge } from "./ui";
 import { api, useDebounced } from "@/lib/client";
+import type { PluginView } from "@/lib/plugins/types";
 import { cn, ROLE_LABEL, timeAgo } from "@/lib/utils";
+import { PluginIcon } from "./plugins/registry";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -21,15 +23,16 @@ const NAV = [
   { href: "/notifications", label: "Notifikasi", icon: Bell },
   { href: "/settings", label: "Pengaturan", icon: Settings },
 ];
-const CRUMB: Record<string, string> = { employees: "Karyawan", organization: "Struktur Organisasi", tasks: "Tugas", projects: "Proyek", chat: "Kolaborasi", shop: "Toko", reports: "Laporan", notifications: "Notifikasi", settings: "Pengaturan" };
+const CRUMB: Record<string, string> = { employees: "Karyawan", organization: "Struktur Organisasi", tasks: "Tugas", projects: "Proyek", chat: "Kolaborasi", shop: "Toko", plugins: "Plugin", office: "Kantor Virtual", reports: "Laporan", notifications: "Notifikasi", settings: "Pengaturan" };
 
-export function Shell({ me, permissions, brand, children }: { me: Me; permissions: string[]; brand: { name: string; logoUrl: string | null }; children: React.ReactNode }) {
+export function Shell({ me, permissions, brand, plugins = [], children }: { me: Me; permissions: string[]; brand: { name: string; logoUrl: string | null }; plugins?: readonly PluginView[]; children: React.ReactNode }) {
   const can = useMemo(() => makeCan(permissions), [permissions]);
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   useEffect(() => setOpen(false), [pathname]);
 
   const nav = NAV.filter((n) => !n.perm || can(n.perm));
+  const visiblePlugins = plugins.filter((p) => p.permissions.every((perm) => can(perm)));
   const seg = pathname.split("/").filter(Boolean);
 
   return (
@@ -51,6 +54,16 @@ export function Shell({ me, permissions, brand, children }: { me: Me; permission
                 <Link key={n.href} href={n.href} aria-current={active ? "page" : undefined}
                   className={cn("group flex items-center gap-3 rounded-lg px-3 py-2 text-[14px] font-medium transition-colors", active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
                   <n.icon className="h-[18px] w-[18px]" />{n.label}
+                </Link>
+              );
+            })}
+            {visiblePlugins.length > 0 && <div className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Plugin</div>}
+            {visiblePlugins.map((p) => {
+              const active = pathname.startsWith(p.route);
+              return (
+                <Link key={p.id} href={p.route} aria-current={active ? "page" : undefined}
+                  className={cn("group flex items-center gap-3 rounded-lg px-3 py-2 text-[14px] font-medium transition-colors", active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
+                  <PluginIcon name={p.icon} className="h-[18px] w-[18px]" />{p.name}
                 </Link>
               );
             })}
