@@ -23,6 +23,23 @@ function angleTowards(current: number, target: number, amount: number): number {
   return current + delta * Math.min(1, amount);
 }
 
+/** Menjaga label tetap di dalam kanvas saat layar sempit (mobile 375px). */
+function clampBubblePosition(
+  el: THREE.Object3D,
+  camera: THREE.Camera,
+  size: { width: number; height: number },
+): number[] {
+  const projected = new THREE.Vector3();
+  el.getWorldPosition(projected);
+  projected.project(camera);
+  const marginX = Math.min(48, size.width * 0.18);
+  const marginY = Math.min(30, size.height * 0.1);
+  return [
+    THREE.MathUtils.clamp(projected.x * (size.width / 2) + size.width / 2, marginX, size.width - marginX),
+    THREE.MathUtils.clamp(-projected.y * (size.height / 2) + size.height / 2, marginY, size.height - marginY),
+  ];
+}
+
 /**
  * Melangkah dibuat di vertex shader: kaki kiri/kanan diayunkan berlawanan
  * fase terhadap pinggul dan diangkat saat melangkah maju. Ini bukan body bob.
@@ -177,7 +194,7 @@ function Worker({ employee, index, movement, message, frozen, selected, onSelect
       </group>
       {selected && <pointLight position={[0, 0.15, 0]} color="#4ea8ff" intensity={1.6} distance={1.5} />}
       {showBubble && (
-        <Html position={[0, FIGURE_HEIGHT + 0.32, 0]} center distanceFactor={9} zIndexRange={[40, 10]} style={{ pointerEvents: "none" }}>
+        <Html position={[0, FIGURE_HEIGHT + 0.32, 0]} center distanceFactor={9} zIndexRange={[40, 10]} calculatePosition={clampBubblePosition} style={{ pointerEvents: "none" }}>
           <div className={selected ? "office-3d-bubble office-3d-bubble-active" : "office-3d-bubble"}>
             <strong>{employee.name.split(/\s+/)[0]}</strong>
             {message && <span>{message}</span>}
