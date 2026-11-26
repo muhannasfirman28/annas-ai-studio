@@ -1,14 +1,17 @@
 "use client";
 
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import type { CSSProperties } from "react";
-import { AVAIL_DOT, AVAIL_LABEL, cn, initials } from "@/lib/utils";
+import { AVAIL_DOT, AVAIL_LABEL, cn } from "@/lib/utils";
 import { ACTIVITY_LABEL, type OfficeActivity, type OfficeEmployee } from "./office-types";
 
 const ENTRANCE = {
   hidden: { opacity: 0, y: 14 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" as const } },
 };
+
+const SKIN_TONES = ["#f2c9a4", "#d9a37c", "#b97d57", "#8d5a3d", "#f5d7bd"];
+const HAIR_TONES = ["#2a1c17", "#4a3020", "#151922", "#6b4026", "#374151"];
 
 function loopFor(activity: OfficeActivity, frozen: boolean, index: number) {
   if (frozen || activity === "offline") return { animate: {}, transition: {} };
@@ -33,6 +36,8 @@ export function OfficeCharacter({
   activity,
   frozen,
   selected,
+  message,
+  emoji,
   onSelect,
   onHover,
 }: {
@@ -41,18 +46,26 @@ export function OfficeCharacter({
   activity: OfficeActivity;
   frozen: boolean;
   selected: boolean;
+  message?: string;
+  emoji?: string;
   onSelect: (id: string) => void;
   onHover: (id: string | null) => void;
 }) {
   const { animate, transition } = loopFor(activity, frozen, index);
   const status = employee.availability ?? "AVAILABLE";
+  const style = {
+    "--person": employee.avatarColor,
+    "--skin": SKIN_TONES[index % SKIN_TONES.length],
+    "--hair": HAIR_TONES[index % HAIR_TONES.length],
+  } as CSSProperties;
 
   return (
     <motion.div variants={ENTRANCE} className={cn("relative flex w-full min-w-0 flex-col items-center", selected && "z-10")}>
       <motion.button
         type="button"
-        aria-label={`${employee.name}, ${employee.title}. ${ACTIVITY_LABEL[activity]} — simulasi visual.`}
+        aria-label={`${employee.name}, ${employee.title}. ${ACTIVITY_LABEL[activity]}${message ? `. Obrolan simulasi: ${message}` : ""}.`}
         aria-pressed={selected}
+        title={`${employee.name} — ${ACTIVITY_LABEL[activity]}`}
         onClick={() => onSelect(employee.id)}
         onMouseEnter={() => onHover(employee.id)}
         onMouseLeave={() => onHover(null)}
@@ -63,21 +76,52 @@ export function OfficeCharacter({
         whileHover={frozen ? undefined : { y: -4 }}
         whileFocus={frozen ? undefined : { y: -4 }}
         className={cn(
-          "group relative flex flex-col items-center rounded-xl px-2 py-1 outline-none transition-colors",
-          selected ? "bg-electric/10 ring-2 ring-electric/60" : "hover:bg-muted/70",
+          "group relative flex flex-col items-center rounded-xl px-2 pb-1 pt-2 outline-none transition-colors",
+          selected ? "bg-electric/10 ring-2 ring-electric/60" : "hover:bg-white/5",
           activity === "offline" && "opacity-45",
         )}
       >
-        <span className="office-person" style={{ "--person": employee.avatarColor } as CSSProperties}>
+        <span className="office-chair" aria-hidden="true" />
+        <span className="office-person" style={style} aria-hidden="true">
           <span className="office-person-head">
-            {employee.avatarUrl ? <img src={employee.avatarUrl} alt="" className="h-full w-full rounded-full object-cover" /> : initials(employee.name)}
+            {employee.avatarUrl ? (
+              <img src={employee.avatarUrl} alt="" className="h-full w-full rounded-[46%] object-cover" />
+            ) : (
+              <>
+                <span className="office-hair" />
+                <span className="office-face">
+                  <span className="office-eye office-eye-left" />
+                  <span className="office-eye office-eye-right" />
+                  <span className="office-smile" />
+                </span>
+              </>
+            )}
           </span>
+          <span className="office-person-neck" />
           <span className="office-person-body">
-            <span className={cn("office-person-arm", !frozen && activity === "typing" && "office-arm-typing")} />
-            <span className={cn("office-person-arm", !frozen && activity === "reading" && "office-arm-reading")} />
+            <span className="office-collar" />
+            <span className={cn("office-person-arm office-arm-left", !frozen && activity === "typing" && "office-arm-typing")}><span className="office-hand" /></span>
+            <span className={cn("office-person-arm office-arm-right", !frozen && activity === "reading" && "office-arm-reading")}><span className="office-hand" /></span>
           </span>
+          <span className="office-laptop"><span className="office-laptop-screen" /></span>
         </span>
-        <span className="office-bubble" aria-hidden="true">{ACTIVITY_LABEL[activity]}</span>
+
+        <span className="office-chat-anchor" aria-hidden="true">
+          <AnimatePresence mode="wait">
+            {message ? (
+              <motion.span
+                key={`${employee.id}:${message}`}
+                className="office-chat-bubble"
+                initial={frozen ? false : { opacity: 0, y: 8, scale: 0.94 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={frozen ? undefined : { opacity: 0, y: -6, scale: 0.96 }}
+                transition={{ duration: frozen ? 0 : 0.24, ease: "easeOut" }}
+              >
+                <span className="office-chat-emoji">{emoji}</span>{message}
+              </motion.span>
+            ) : null}
+          </AnimatePresence>
+        </span>
       </motion.button>
 
       <div className="office-nameplate">

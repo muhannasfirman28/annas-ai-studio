@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { MotionConfig, motion, useReducedMotion } from "motion/react";
-import { Building2, Coffee, Pause, Play } from "lucide-react";
+import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
+import { Building2, Coffee, MessageCircle, Pause, Play } from "lucide-react";
 import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, PageHeader, PageLoading, Select } from "@/components/ui";
 import { useApi } from "@/lib/client";
 import { AVAIL_DOT, AVAIL_LABEL, cn } from "@/lib/utils";
+import { OfficeBackdrop } from "./office-backdrop";
 import { OfficeCharacter } from "./office-character";
-import { ACTIVITY_LABEL, activityFor, type OfficeEmployee } from "./office-types";
+import { ACTIVITY_LABEL, activityFor, officeChat, officeChatFeed, type OfficeEmployee } from "./office-types";
 
 type EmployeesResponse = { employees: OfficeEmployee[] };
 
@@ -20,6 +21,7 @@ export function OfficePlugin() {
   const [department, setDepartment] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [chatTick, setChatTick] = useState(0);
 
   useEffect(() => {
     const sync = () => setVisible(document.visibilityState === "visible");
@@ -34,11 +36,21 @@ export function OfficePlugin() {
   const selected = employees.find((e) => e.id === selectedId) ?? null;
   const frozen = paused || Boolean(reduceMotion) || !visible;
 
+  useEffect(() => {
+    if (frozen) return;
+    const id = window.setInterval(() => setChatTick((tick) => tick + 1), 4200);
+    return () => window.clearInterval(id);
+  }, [frozen]);
+
+  const chat = useMemo(() => officeChat(shown, chatTick), [shown, chatTick]);
+  const chatFeed = useMemo(() => officeChatFeed(shown, chatTick), [shown, chatTick]);
+  const chatBySpeaker = useMemo(() => new Map(chat.map((line) => [line.speakerId, line])), [chat]);
+
   return (
     <div className="animate-in space-y-5">
       <PageHeader
         title="Kantor Virtual"
-        subtitle="Visualisasi animasi tim Annas AI Studio saat bekerja."
+        subtitle="Visualisasi animasi tim Annas AI Studio saat bekerja. Obrolan dan gerakan adalah simulasi visual."
         actions={<>
           <Badge className="border border-electric/30 bg-electric/10 text-electric">Simulasi visual</Badge>
           <Button variant="outline" size="sm" onClick={() => setPaused((v) => !v)} aria-pressed={paused}>
@@ -55,17 +67,20 @@ export function OfficePlugin() {
             <Card className="overflow-hidden p-0">
               <CardHeader
                 title="Lantai kerja"
-                subtitle={`${shown.length} karyawan tampil — gerakan adalah simulasi, bukan pemantauan langsung.`}
+                subtitle={`${shown.length} karyawan tampil — obrolan dan gerakan adalah simulasi, bukan pemantauan langsung.`}
                 action={<Select aria-label="Filter divisi" value={department} onChange={(e) => setDepartment(e.target.value)} className="h-8 w-44 text-[13px]">
                   <option value="">Semua divisi</option>
                   {departments.map((d) => <option key={d} value={d}>{d}</option>)}
                 </Select>}
               />
-              <div className="office-floor mt-4">
-                <div className="office-wall"><span>ANNAS AI STUDIO</span><span className="text-[10px] opacity-60">Team Workspace</span></div>
-                <div className="office-coffee" title="Mesin kopi" aria-hidden="true"><Coffee className="h-4 w-4" /></div>
+              <div className="office-floor">
+                <OfficeBackdrop />
+                <div className="office-sign"><span>ANNAS AI STUDIO</span><small>Team Workspace · Simulasi langsung</small></div>
+                <div className="office-pendant office-pendant-a" aria-hidden="true" />
+                <div className="office-pendant office-pendant-b" aria-hidden="true" />
+                <div className="office-coffee" title="Mesin kopi" aria-hidden="true"><Coffee className="h-3.5 w-3.5" /></div>
                 {shown.length === 0 ? (
-                  <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">Tidak ada karyawan di divisi ini.</div>
+                  <div className="relative z-10 flex h-64 items-center justify-center text-sm text-white/80">Tidak ada karyawan di divisi ini.</div>
                 ) : (
                   <motion.div
                     className="office-desks"
@@ -75,19 +90,23 @@ export function OfficePlugin() {
                   >
                     {shown.map((employee, index) => {
                       const activity = activityFor(employee, index);
+                      const line = chatBySpeaker.get(employee.id);
                       return (
                         <div key={employee.id} className={cn("office-desk", hoveredId === employee.id && "office-desk-active")}>
-                          <div className="office-monitor" aria-hidden="true"><span className="office-monitor-screen" /></div>
+                          <div className="office-monitor" aria-hidden="true"><span className="office-monitor-screen"><i /><i /><i /></span><span className="office-monitor-stand" /></div>
                           <OfficeCharacter
                             employee={employee}
                             index={index}
                             activity={activity}
                             frozen={frozen}
                             selected={selectedId === employee.id}
+                            message={line?.text}
+                            emoji={line?.emoji}
                             onSelect={(id) => setSelectedId((cur) => (cur === id ? null : id))}
                             onHover={setHoveredId}
                           />
-                          <div className="office-keyboard" aria-hidden="true" />
+                          <div className="office-keyboard" aria-hidden="true"><i /><i /><i /><i /><i /><i /></div>
+                          <div className="office-mug" aria-hidden="true" />
                         </div>
                       );
                     })}
@@ -98,8 +117,39 @@ export function OfficePlugin() {
 
             <div className="space-y-5">
               <Card>
+                <CardHeader title="Obrolan tim" subtitle="Percakapan simulasi, bukan chat asli karyawan." />
+                <div className="max-h-[220px] space-y-2 overflow-y-auto p-3">
+                  {chatFeed.length === 0 ? (
+                    <p className="text-[12px] text-muted-foreground">Belum ada obrolan yang bisa ditampilkan.</p>
+                  ) : (
+                    <AnimatePresence initial={false}>
+                      {chatFeed.map((line) => (
+                        <motion.div
+                          key={line.id}
+                          initial={frozen ? false : { opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={frozen ? undefined : { opacity: 0, y: -4 }}
+                          transition={{ duration: frozen ? 0 : 0.22 }}
+                          className="flex gap-2 rounded-lg bg-muted/60 p-2"
+                        >
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-electric/15 text-[11px] font-bold text-electric">{line.speakerName.slice(0, 1)}</span>
+                          <span className="min-w-0">
+                            <span className="flex items-center gap-1.5">
+                              <span className="truncate text-[11px] font-semibold">{line.speakerName}</span>
+                              <span className="text-[9px] uppercase tracking-wide text-muted-foreground">simulasi</span>
+                            </span>
+                            <span className="block text-[12px] leading-snug">{line.emoji} {line.text}</span>
+                          </span>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  )}
+                </div>
+              </Card>
+
+              <Card>
                 <CardHeader title="Daftar tim" subtitle="Klik nama untuk menyorot meja mereka." />
-                <div className="max-h-[340px] space-y-1 overflow-y-auto p-3">
+                <div className="max-h-[280px] space-y-1 overflow-y-auto p-3">
                   {shown.map((employee, index) => {
                     const activity = activityFor(employee, index);
                     const status = employee.availability ?? "AVAILABLE";
@@ -113,6 +163,7 @@ export function OfficePlugin() {
                           <span className="block truncate text-[13px] font-medium">{employee.name}</span>
                           <span className="block truncate text-[11px] text-muted-foreground">{ACTIVITY_LABEL[activity]}</span>
                         </span>
+                        <MessageCircle className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground", chatBySpeaker.has(employee.id) && "text-electric")} aria-hidden="true" />
                         <span className={cn("h-2 w-2 shrink-0 rounded-full", AVAIL_DOT[status] ?? AVAIL_DOT.AVAILABLE)} title={AVAIL_LABEL[status] ?? status} aria-label={AVAIL_LABEL[status] ?? status} />
                       </button>
                     );
@@ -127,7 +178,7 @@ export function OfficePlugin() {
                     <div className="flex justify-between gap-3"><span className="text-muted-foreground">Divisi</span><span>{selected.department?.name ?? "—"}</span></div>
                     <div className="flex justify-between gap-3"><span className="text-muted-foreground">Status</span><span>{AVAIL_LABEL[selected.availability ?? "AVAILABLE"] ?? selected.availability}</span></div>
                     <div className="flex justify-between gap-3"><span className="text-muted-foreground">Aktivitas</span><span>{ACTIVITY_LABEL[activityFor(selected, Math.max(0, shown.findIndex((e) => e.id === selected.id)))]}</span></div>
-                    <p className="rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">Gerakan di lantai kerja hanya simulasi visual. Status diambil dari data karyawan.</p>
+                    <p className="rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">Gerakan dan obrolan di lantai kerja hanya simulasi visual. Status diambil dari data karyawan.</p>
                     <Link href={`/employees/${selected.id}`} className="inline-flex h-9 w-full items-center justify-center rounded-lg bg-electric px-4 font-medium text-white transition-opacity hover:opacity-90">Lihat profil karyawan</Link>
                   </div>
                 </Card>
