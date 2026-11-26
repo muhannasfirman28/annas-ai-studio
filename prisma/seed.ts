@@ -79,7 +79,7 @@ const EMP: E[] = [
 const ROLE_PERMS: Record<UserRole, { name: string; description: string; perms: string[] }> = {
   FOUNDER: { name: "Founder / Super Admin", description: "Akses penuh ke seluruh sistem.", perms: ["*"] },
   EXECUTIVE: { name: "Executive", description: "Mengelola karyawan, proyek, tugas, dan laporan.",
-    perms: ["employees.read", "employees.write", "tasks.read", "tasks.write", "tasks.delete", "projects.read", "projects.write", "reports.read", "reports.write", "chat.use", "settings.read"] },
+    perms: ["employees.read", "employees.write", "tasks.read", "tasks.write", "tasks.delete", "projects.read", "projects.write", "reports.read", "reports.write", "chat.use", "settings.read", "settings.write"] },
   MANAGER: { name: "Manager", description: "Mengelola tugas dan proyek timnya.",
     perms: ["employees.read", "tasks.read", "tasks.write", "projects.read", "projects.write", "reports.read", "reports.write", "chat.use"] },
   EMPLOYEE: { name: "Employee", description: "Mengerjakan tugas dan membuat laporan sendiri.",

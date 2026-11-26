@@ -15,7 +15,9 @@ function SettingsInner() {
   const { can } = useApp(); const sp = useSearchParams();
   const company = can("settings.read"); const manage = can("users.manage");
   const tabs = [
-    ...(company ? [{ k: "company", l: "Perusahaan", i: Building2 }, { k: "visual", l: "Visual & tema", i: Palette }, { k: "plugins", l: "Plugin", i: Puzzle }, { k: "notif", l: "Notifikasi", i: KeyRound }] : []),
+    ...(company ? [{ k: "company", l: "Perusahaan", i: Building2 }, { k: "visual", l: "Visual & tema", i: Palette }] : []),
+    { k: "plugins", l: "Plugin", i: Puzzle },
+    ...(company ? [{ k: "notif", l: "Notifikasi", i: KeyRound }] : []),
     ...(manage ? [{ k: "users", l: "Pengguna & role", i: Users }] : []),
     ...(company ? [{ k: "ai", l: "Integrasi & AI", i: Bot }] : []),
     { k: "security", l: "Keamanan", i: ShieldCheck },

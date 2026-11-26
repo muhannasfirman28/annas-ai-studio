@@ -39,7 +39,7 @@ export function PluginSettings() {
 
   return (
     <Card>
-      <CardHeader title="Plugin" subtitle="Modul tambahan yang bisa diaktifkan atau dinonaktifkan. Nonaktif membuat halaman plugin tidak dapat diakses." />
+      <CardHeader title="Plugin" subtitle="Modul tambahan yang bisa diaktifkan atau dinonaktifkan. Nonaktif membuat halaman plugin tidak dapat diakses. Status dapat diubah oleh Founder dan Executive." />
       <div className="divide-y p-2">
         {data.plugins.map((plugin) => (
           <div key={plugin.id} className="flex flex-wrap items-start gap-3 px-3 py-4">
