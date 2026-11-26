@@ -4,3 +4,5 @@ node_modules
 .env
 uploads/*
 !uploads/.gitkeep
+.assets-meshy/
+.playwright-mcp/

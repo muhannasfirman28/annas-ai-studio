@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
 import { Building2, Coffee, MessageCircle, Pause, Play, Users } from "lucide-react";
@@ -23,6 +24,11 @@ import {
 
 type EmployeesResponse = { employees: OfficeEmployee[] };
 
+const OfficeScene3D = dynamic(() => import("./office-scene-3d").then((module) => module.OfficeScene3D), {
+  ssr: false,
+  loading: () => <div className="office-3d-loading">Memuat ruangan 3D…</div>,
+});
+
 export function OfficePlugin() {
   const { data, error, loading, reload } = useApi<EmployeesResponse>("/api/employees");
   const reduceMotion = useReducedMotion();
@@ -32,6 +38,16 @@ export function OfficePlugin() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  const [webgl, setWebgl] = useState(false);
+
+  useEffect(() => {
+    try {
+      const canvas = document.createElement("canvas");
+      setWebgl(Boolean(canvas.getContext("webgl2") ?? canvas.getContext("webgl")));
+    } catch {
+      setWebgl(false);
+    }
+  }, []);
 
   useEffect(() => {
     const sync = () => setVisible(document.visibilityState === "visible");
@@ -45,6 +61,7 @@ export function OfficePlugin() {
   const shown = useMemo(() => (department ? employees.filter((e) => e.department?.name === department) : employees), [employees, department]);
   const selected = employees.find((e) => e.id === selectedId) ?? null;
   const frozen = paused || Boolean(reduceMotion) || !visible;
+  const show3D = webgl && !reduceMotion;
 
   // Satu putaran menggerakkan rute jalan sekaligus mengganti obrolan.
   useEffect(() => {
@@ -60,6 +77,14 @@ export function OfficePlugin() {
   const chat = useMemo(() => officeChat(shown, tick), [shown, tick]);
   const chatFeed = useMemo(() => officeChatFeed(shown, tick), [shown, tick]);
   const chatBySpeaker = useMemo(() => new Map(chat.map((line) => [line.speakerId, line])), [chat]);
+  const bubbles = useMemo(() => {
+    const map = new Map<string, string>();
+    chat.forEach((line) => map.set(line.speakerId, `${line.emoji} ${line.text}`));
+    movements.forEach(({ employee, move }) => {
+      if (move.action) map.set(employee.id, `${move.action.emoji} ${move.action.label}`);
+    });
+    return map;
+  }, [chat, movements]);
 
   const selectedIndex = Math.max(0, shown.findIndex((e) => e.id === selectedId));
   const selectedActivity = selected ? movementFor(selected, selectedIndex, tick).activity : null;
@@ -91,7 +116,20 @@ export function OfficePlugin() {
                   {departments.map((d) => <option key={d} value={d}>{d}</option>)}
                 </Select>}
               />
-              <div className="office-floor">
+              <div className={cn("office-floor", show3D && "office-floor-3d")}>
+                {show3D ? (
+                  <OfficeScene3D
+                    employees={shown}
+                    movements={movements.map((item) => item.move)}
+                    messages={bubbles}
+                    frozen={frozen}
+                    selectedId={selectedId}
+                    hoveredId={hoveredId}
+                    onSelect={(id) => setSelectedId((cur) => (cur === id ? null : id))}
+                    onHover={setHoveredId}
+                  />
+                ) : (
+                  <>
                 <OfficeBackdrop />
                 <div className="office-sign"><span>ANNAS AI STUDIO</span><small>Team Workspace · Simulasi langsung</small></div>
                 <div className="office-pendant office-pendant-a" aria-hidden="true" />
@@ -159,6 +197,8 @@ export function OfficePlugin() {
                         </motion.div>
                       );
                     })}
+                  </>
+                )}
                   </>
                 )}
               </div>

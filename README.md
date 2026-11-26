@@ -31,9 +31,26 @@ Dashboard (statistik dari data nyata), Karyawan (card/tabel, filter, CRUD, detai
 
 ## Sistem Plugin
 
-Plugin didefinisikan oleh manifest di `src/lib/plugins/registry.ts` (metadata: id, nama, rute, izin, status default) dan komponen UI di `src/components/plugins/registry.tsx`. Status aktif/disimpan di tabel `plugin_settings` (migrasi `0006`). Tab **Pengaturan → Plugin** tampil untuk semua karyawan yang login; tombol aktif/nonaktif hanya tersedia untuk role dengan `settings.write` (Founder dan Executive). Menu sidebar dan rute `/plugins/[slug]` mengikuti status tersebut: plugin nonaktif membuat rutenya 404. Kode JS tidak pernah dimuat dari database — hanya manifest yang dikenal yang bisa dipasang. Kantor Virtual memakai latar SVG + karakter CSS/Motion dan obrolan tim yang sepenuhnya simulasi visual (bukan chat atau pemantauan karyawan nyata).
+Plugin didefinisikan oleh manifest di `src/lib/plugins/registry.ts` (metadata: id, nama, rute, izin, status default) dan komponen UI di `src/components/plugins/registry.tsx`. Status aktif/disimpan di tabel `plugin_settings` (migrasi `0006`). Tab **Pengaturan → Plugin** tampil untuk semua karyawan yang login; tombol aktif/nonaktif hanya tersedia untuk role dengan `settings.write` (Founder dan Executive). Menu sidebar dan rute `/plugins/[slug]` mengikuti status tersebut: plugin nonaktif membuat rutenya 404. Kode JS tidak pernah dimuat dari database — hanya manifest yang dikenal yang bisa dipasang.
 
-Plugin bawaan pertama: **Kantor Virtual** (`/plugins/office`). Plugin ini memakai `motion` (React) untuk menampilkan karyawan dari data nyata (`/api/employees`) duduk di meja, mengetik, membaca, fokus, atau jalan sebentar. Nama, jabatan, divisi, warna, dan status availability berasal dari database; **gerakan bekerja murni simulasi visual**, bukan pemantauan langsung. Animasi berhenti saat tab tidak aktif, saat tombol Jeda ditekan, atau saat pengguna memilih reduced motion.
+Plugin bawaan pertama: **Kantor Virtual** (`/plugins/office`). Nama, jabatan, divisi, warna, dan status availability berasal dari data nyata (`/api/employees`), tetapi **seluruh gerakan dan obrolan murni simulasi visual**, bukan pemantauan karyawan nyata. Mode utama adalah ruangan 3D WebGL (three.js + React Three Fiber) berisi meja, kursi, monitor, mesin kopi, dan ruang meeting dengan 8 model generik; kaki dan lengan melangkah lewat animasi vertex shader prosedural (bukan rig/skin Meshy). Jika WebGL tidak tersedia, reduced motion aktif, atau tombol **Jeda** ditekan, plugin memakai fallback 2D (SVG + CSS + Motion) dan/atau berhenti bergerak. Model 3D sengaja generik dan tidak dibuat menyerupai wajah karyawan asli.
+
+### Kredit aset Kantor Virtual 3D
+
+Delapan model dibuat di [Meshy](https://www.meshy.ai/) dari gambar referensi komunitas berlisensi **CC0**. Hasil generate bermodel lisensi **CC BY 4.0** dan dikreditkan di bawah. File `.meshy` diterjemahkan ke GLB memakai [meshy2glb](https://amal-david.github.io/meshy2glb/) (MIT), lalu disimpan di `public/models/office/`. Manifest lengkap ada di `src/lib/office-models.ts`.
+
+| Peran | Model (task Meshy) | Referensi CC0 — creator & sumber | Lisensi |
+| --- | --- | --- | --- |
+| Founder / CEO | `worker-01.glb` — `01a217b0-ca5d-7683-ac85-eea03f26222a` | [rayquaza.666](https://www.meshy.ai/discover/executive-man) · ref `01a03e0d-6189-7f64-854e-127fcbf26aa8` | model CC BY 4.0 · ref CC0 |
+| CTO | `worker-02.glb` — `01a217bb-45bf-74ab-9155-3e8b31fe457b` | [celularbcx](https://www.meshy.ai/discover/01a19cae-312c-73ef-8b16-ae637b2cdb21) · ref `01a19cac-db5a-758d-b407-83b31d67f7bc` | model CC BY 4.0 · ref CC0 |
+| COO | `worker-03.glb` — `01a217bb-f55f-7602-9bdb-96d1d26fa36e` | [truculences](https://www.meshy.ai/discover/019c9a5d-8f4d-754f-b026-ed4030f37380) · ref `019c9a32-b1b1-705d-90fa-2974812b562f` | model CC BY 4.0 · ref CC0 |
+| Lead Full-Stack Developer | `worker-04.glb` — `01a217bc-23bf-746a-b0c3-ffca3d25fd3f` | [serdykee](https://www.meshy.ai/discover/019e9e35-d823-72f1-bfd3-391233fc5896) · ref `019e9e33-ee6e-77c2-94d8-5b5a65406594` | model CC BY 4.0 · ref CC0 |
+| UI/UX Designer | `worker-05.glb` — `01a217bb-6cee-7763-8d1b-3391c9eb0099` | [lm2103200016](https://www.meshy.ai/discover/019e97d8-56f8-72eb-8ad2-229e85e8a0b7) · ref `019e97ca-446d-7459-a978-e89832ef0ae1` | model CC BY 4.0 · ref CC0 |
+| AI Engineer | `worker-06.glb` — `01a217bc-66fe-770c-8b1d-680f02506dd3` | [playstore](https://www.meshy.ai/discover/Executive-Balance) · ref `01a00f82-634e-7312-9901-f5e61b539d14` | model CC BY 4.0 · ref CC0 |
+| Data Analyst | `worker-07.glb` — `01a217bc-a87c-76b6-a6e1-68a8d547bbba` | [sujithsujith313](https://www.meshy.ai/discover/male-interviewer) · ref `70e7353b-53fb-4f91-8c94-3f41bde76d2f` | model CC BY 4.0 · ref CC0 |
+| QA & Security Engineer | `worker-08.glb` — `01a217bc-d6d9-7125-b147-eccddc71a473` | [Emmett Cross](https://www.meshy.ai/discover/019f6e50-a37a-7033-9b9c-707a06cf8eb1) · ref `019f6e12-1e0b-7129-8a45-5c964d5b91da` | model CC BY 4.0 · ref CC0 |
+
+Atribusi di atas mengikuti ketentuan CC BY 4.0 (creator, URL sumber, dan lisensi dicantumkan). Referensi CC0 tetap dicreditkan sebagai bentuk apresiasi. Lisensi: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) · [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) · [MIT](https://opensource.org/license/mit).
 
 **Skor produktivitas** dihitung hanya dari tugas: tugas selesai tepat waktu ÷ (tugas selesai ber-deadline + tugas yang lewat deadline). Tanpa data tampil “—”.
 
