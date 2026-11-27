@@ -15,6 +15,7 @@ import {
   officeChat,
   officeChatFeed,
   roomIndexFor,
+  roomLocalPoint,
   roomOrigin,
   spotCorridor,
   spotLocal,
@@ -124,6 +125,23 @@ test("urutan seed terbagi 4+4 ke dua ruang kerja", () => {
   assert.equal(plan.filter((item) => item.move.homeRoomIndex === 1).length, 4);
   assert.deepEqual(plan.filter((item) => item.move.homeRoomIndex === 0).map((item) => item.move.slot), [0, 1, 2, 3]);
   assert.deepEqual(plan.filter((item) => item.move.homeRoomIndex === 1).map((item) => item.move.slot), [0, 1, 2, 3]);
+});
+
+test("perabot memakai koordinat lokal sehingga tidak keluar dari ruangan", () => {
+  for (const layout of ["wide", "tall"] as const) {
+    for (const index of OFFICE_ROOMS.map((_, roomIndex) => roomIndex)) {
+      const origin = roomOrigin(index, layout);
+      const local = roomLocalPoint(50, 50);
+      const world = localToRoom(index, layout, 50, 50);
+      assert.equal(origin.x + local.x, world.x);
+      assert.equal(origin.z + local.z, world.z);
+    }
+  }
+  for (const spot of ROOM_DESK_SPOTS) {
+    const local = roomLocalPoint(spot.x, spot.y);
+    assert.ok(Math.abs(local.x) + 1.6 < ROOM_GEOMETRY.width / 2);
+    assert.ok(Math.abs(local.z) + 1.06 < ROOM_GEOMETRY.depth / 2);
+  }
 });
 
 test("setiap meja ruang kerja dipetakan ke satu karyawan secara stabil", () => {

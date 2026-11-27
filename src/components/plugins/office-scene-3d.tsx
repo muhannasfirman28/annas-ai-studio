@@ -19,7 +19,7 @@ import {
   ROOM_DESK_SPOTS,
   ROOM_GEOMETRY,
   gridFor,
-  localToRoom,
+  roomLocalPoint,
   roomOrigin,
   spotToWorld,
   type OfficeDeskOwner,
@@ -298,8 +298,7 @@ function Worker({ employee, index, movement, message, frozen, dim, selected, onS
   );
 }
 
-function Desk({ roomIndex, x, y, slot, owner, dim, highlight }: {
-  roomIndex: number;
+function Desk({ x, y, slot, owner, dim, highlight }: {
   x: number;
   y: number;
   slot: number;
@@ -307,8 +306,7 @@ function Desk({ roomIndex, x, y, slot, owner, dim, highlight }: {
   dim: boolean;
   highlight: boolean;
 }) {
-  const layout = useOfficeLayout();
-  const spot = localToRoom(roomIndex, layout, x, y);
+  const spot = roomLocalPoint(x, y);
   return (
     <group position={[spot.x, 0, spot.z]}>
       <mesh position={[0, 0.72, 0]} receiveShadow castShadow>
@@ -372,9 +370,8 @@ function Desk({ roomIndex, x, y, slot, owner, dim, highlight }: {
   );
 }
 
-function CoffeeMachine({ roomIndex, x, y, dim }: { roomIndex: number; x: number; y: number; dim: boolean }) {
-  const layout = useOfficeLayout();
-  const spot = localToRoom(roomIndex, layout, x, y);
+function CoffeeMachine({ x, y, dim }: { x: number; y: number; dim: boolean }) {
+  const spot = roomLocalPoint(x, y);
   return (
     <group position={[spot.x, 0, spot.z]}>
       <mesh position={[0, 0.45, 0]} castShadow>
@@ -421,9 +418,8 @@ function CoffeeCup({ position, dim }: { position: [number, number, number]; dim:
   );
 }
 
-function CoffeeTable({ roomIndex, x, y, dim }: { roomIndex: number; x: number; y: number; dim: boolean }) {
-  const layout = useOfficeLayout();
-  const spot = localToRoom(roomIndex, layout, x, y);
+function CoffeeTable({ x, y, dim }: { x: number; y: number; dim: boolean }) {
+  const spot = roomLocalPoint(x, y);
   return (
     <group position={[spot.x, 0, spot.z]}>
       <mesh position={[0, 0.64, 0]} castShadow receiveShadow>
@@ -454,9 +450,8 @@ function CoffeeTable({ roomIndex, x, y, dim }: { roomIndex: number; x: number; y
   );
 }
 
-function ConferenceTable({ roomIndex, x, y, dim }: { roomIndex: number; x: number; y: number; dim: boolean }) {
-  const layout = useOfficeLayout();
-  const spot = localToRoom(roomIndex, layout, x, y);
+function ConferenceTable({ x, y, dim }: { x: number; y: number; dim: boolean }) {
+  const spot = roomLocalPoint(x, y);
   return (
     <group position={[spot.x, 0, spot.z]}>
       <mesh position={[0, 0.74, 0]} castShadow receiveShadow>
@@ -608,7 +603,6 @@ function OfficeRoomShell({ room, index, active, deskOwners, selectedId, hoveredI
         return (
           <Desk
             key={slot}
-            roomIndex={index}
             x={spot.x}
             y={spot.y}
             slot={slot}
@@ -620,14 +614,14 @@ function OfficeRoomShell({ room, index, active, deskOwners, selectedId, hoveredI
       })}
       {room.kind === "coffee" && (
         <>
-          <CoffeeMachine roomIndex={index} x={50} y={18} dim={dim} />
-          <CoffeeTable roomIndex={index} x={26} y={62} dim={dim} />
-          <CoffeeTable roomIndex={index} x={74} y={62} dim={dim} />
+          <CoffeeMachine x={50} y={18} dim={dim} />
+          <CoffeeTable x={26} y={62} dim={dim} />
+          <CoffeeTable x={74} y={62} dim={dim} />
         </>
       )}
       {room.kind === "meeting" && (
         <>
-          <ConferenceTable roomIndex={index} x={50} y={34} dim={dim} />
+          <ConferenceTable x={50} y={34} dim={dim} />
           <MeetingTV dim={dim} />
         </>
       )}

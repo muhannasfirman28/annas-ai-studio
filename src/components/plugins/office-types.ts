@@ -189,13 +189,19 @@ export function roomOrigin(index: number, layout: OfficeLayoutName): { x: number
   return origins[((index % origins.length) + origins.length) % origins.length];
 }
 
+/** Persentase dalam satu ruangan → posisi relatif terhadap tengah ruangan. */
+export function roomLocalPoint(x: number, y: number): { x: number; z: number } {
+  return {
+    x: (x / 100 - 0.5) * ROOM_GEOMETRY.width,
+    z: (y / 100 - 0.5) * ROOM_GEOMETRY.depth,
+  };
+}
+
 /** Persentase dalam satu ruangan dipetakan ke posisi dunia three.js. */
 export function localToRoom(index: number, layout: OfficeLayoutName, x: number, y: number): { x: number; z: number } {
   const origin = roomOrigin(index, layout);
-  return {
-    x: origin.x + (x / 100 - 0.5) * ROOM_GEOMETRY.width,
-    z: origin.z + (y / 100 - 0.5) * ROOM_GEOMETRY.depth,
-  };
+  const local = roomLocalPoint(x, y);
+  return { x: origin.x + local.x, z: origin.z + local.z };
 }
 
 /** Titik kerja dalam ruang kerja (persentase lokal ruangan). */
