@@ -86,25 +86,45 @@ export function officeChatFeed(employees: OfficeEmployee[], tick = 0, limit = 4)
   return messages.slice(-limit);
 }
 
-export interface DepartmentRoom {
-  /** Nama divisi persis seperti data `/api/employees`. */
+export type OfficeRoomKind = "work" | "coffee" | "meeting";
+
+export interface OfficeRoom {
+  /** Nama ruangan yang tampil di papan nama. */
   name: string;
-  /** Label pendek untuk papan nama ruangan. */
+  /** Label pendek untuk papan nama dan kartu fallback. */
   label: string;
+  kind: OfficeRoomKind;
   color: string;
+  /** Divisi yang duduk di ruang kerja, mengikuti urutan seed. */
+  departments: readonly string[];
 }
 
-/** Delapan ruangan sesuai seed departemen Annas AI Studio. */
-export const DEPARTMENT_ROOMS: readonly DepartmentRoom[] = [
-  { name: "Executive", label: "Eksekutif", color: "#0a1530" },
-  { name: "Technology", label: "Teknologi", color: "#2563eb" },
-  { name: "Operations", label: "Operasional", color: "#0891b2" },
-  { name: "Software Development", label: "Software", color: "#4f46e5" },
-  { name: "Creative & Design", label: "Desain", color: "#db2777" },
-  { name: "Artificial Intelligence", label: "AI", color: "#7c3aed" },
-  { name: "Data & Analytics", label: "Data", color: "#059669" },
-  { name: "Quality Assurance & Security", label: "QA & Security", color: "#dc2626" },
+/**
+ * Empat ruangan: dua ruang kerja berisi 4+4 karyawan, ditambah Ruang Kopi
+ * dan Ruang Meeting yang dipakai bersama. Urutan array = urutan grid 2×2.
+ */
+export const OFFICE_ROOMS: readonly OfficeRoom[] = [
+  {
+    name: "Ruang Kerja 1",
+    label: "Kerja 1",
+    kind: "work",
+    color: "#2563eb",
+    departments: ["Executive", "Technology", "Operations", "Software Development"],
+  },
+  {
+    name: "Ruang Kerja 2",
+    label: "Kerja 2",
+    kind: "work",
+    color: "#7c3aed",
+    departments: ["Creative & Design", "Artificial Intelligence", "Data & Analytics", "Quality Assurance & Security"],
+  },
+  { name: "Ruang Kopi", label: "Kopi", kind: "coffee", color: "#d97706", departments: [] },
+  { name: "Ruang Meeting", label: "Meeting", kind: "meeting", color: "#059669", departments: [] },
 ] as const;
+
+export const COFFEE_ROOM_INDEX = OFFICE_ROOMS.findIndex((room) => room.kind === "coffee");
+export const MEETING_ROOM_INDEX = OFFICE_ROOMS.findIndex((room) => room.kind === "meeting");
+export const WORK_ROOM_COUNT = OFFICE_ROOMS.filter((room) => room.kind === "work").length;
 
 export type OfficeLayoutName = "wide" | "tall";
 
@@ -120,13 +140,10 @@ export interface OfficeGrid {
   origins: Array<{ x: number; z: number }>;
 }
 
-/**
- * Desktop memakai grid 4×2; layar sempit memakai 2×4 supaya delapan ruangan
- * tetap terbaca tanpa perlu scroll horizontal.
- */
+/** Kedua layout memakai grid 2×2 supaya komposisi ruangan tetap sama. */
 export function gridFor(layout: OfficeLayoutName): OfficeGrid {
-  const columns = layout === "tall" ? 2 : 4;
-  const rows = layout === "tall" ? 4 : 2;
+  const columns = 2;
+  const rows = 2;
   const stepX = ROOM_GEOMETRY.width + ROOM_GEOMETRY.gap;
   const stepZ = ROOM_GEOMETRY.depth + ROOM_GEOMETRY.gap;
 
@@ -136,26 +153,35 @@ export function gridFor(layout: OfficeLayoutName): OfficeGrid {
     rows,
     width: columns * ROOM_GEOMETRY.width + (columns - 1) * ROOM_GEOMETRY.gap,
     depth: rows * ROOM_GEOMETRY.depth + (rows - 1) * ROOM_GEOMETRY.gap,
-    origins: DEPARTMENT_ROOMS.map((_, index) => ({
+    origins: OFFICE_ROOMS.map((_, index) => ({
       x: ((index % columns) - (columns - 1) / 2) * stepX,
       z: (Math.floor(index / columns) - (rows - 1) / 2) * stepZ,
     })),
   };
 }
 
+/**
+ * Memetakan divisi ke ruang kerja. Divisi baru yang belum dikenal tetap
+ * mendapat satu dari dua ruang kerja secara stabil.
+ */
 export function roomIndexFor(departmentName?: string | null): number {
   const normalized = (departmentName ?? "").trim().toLowerCase();
   if (!normalized) return 0;
 
-  const exact = DEPARTMENT_ROOMS.findIndex((room) => room.name.trim().toLowerCase() === normalized);
-  if (exact >= 0) return exact;
+  const workRooms = OFFICE_ROOMS
+    .map((room, index) => ({ room, index }))
+    .filter((entry) => entry.room.kind === "work");
 
-  // Nama divisi baru tetap mendapat ruangan yang stabil tanpa mengubah seed.
+  const exact = workRooms.findIndex(({ room }) =>
+    room.departments.some((name) => name.trim().toLowerCase() === normalized),
+  );
+  if (exact >= 0) return workRooms[exact].index;
+
   let hash = 0;
   for (let index = 0; index < normalized.length; index += 1) {
     hash = (hash * 31 + normalized.charCodeAt(index)) >>> 0;
   }
-  return hash % DEPARTMENT_ROOMS.length;
+  return workRooms[hash % WORK_ROOM_COUNT].index;
 }
 
 export function roomOrigin(index: number, layout: OfficeLayoutName): { x: number; z: number } {
@@ -172,92 +198,208 @@ export function localToRoom(index: number, layout: OfficeLayoutName, x: number, 
   };
 }
 
-/** Titik kerja dalam satu ruangan (persentase lokal). */
+/** Titik kerja dalam ruang kerja (persentase lokal ruangan). */
 export const ROOM_DESK_SPOTS = [
-  { x: 20, y: 32 },
-  { x: 49, y: 32 },
-  { x: 20, y: 59 },
-  { x: 49, y: 59 },
+  { x: 26, y: 30 },
+  { x: 64, y: 30 },
+  { x: 26, y: 68 },
+  { x: 64, y: 68 },
 ] as const;
 
-export const ROOM_COFFEE_SPOT = { x: 84, y: 28 } as const;
-export const ROOM_MEETING_SPOT = { x: 77, y: 73 } as const;
-
-export interface OfficeMovement {
-  /** Posisi lokal di dalam ruangan, dalam persentase. */
+/**
+ * Posisi rute dinyatakan dalam persentase seluruh peta 2×2, bukan lokal
+ * ruangan, supaya karyawan benar-benar berpindah ruang lewat koridor.
+ * `roomIndex = -1` berarti titik ada di koridor antar ruangan.
+ */
+export interface OfficeSpot {
+  roomIndex: number;
   x: number;
   y: number;
+}
+
+export function spotLocal(roomIndex: number, x: number, y: number): OfficeSpot {
+  const grid = gridFor("wide");
+  const origin = roomOrigin(roomIndex, "wide");
+  const worldX = origin.x + (x / 100 - 0.5) * ROOM_GEOMETRY.width;
+  const worldZ = origin.z + (y / 100 - 0.5) * ROOM_GEOMETRY.depth;
+  return {
+    roomIndex,
+    x: (worldX / grid.width + 0.5) * 100,
+    y: (worldZ / grid.depth + 0.5) * 100,
+  };
+}
+
+export function spotCorridor(x: number, y: number): OfficeSpot {
+  return { roomIndex: -1, x, y };
+}
+
+/** Persentase peta → posisi dunia three.js (sumbu Z mengikuti peta). */
+export function spotToWorld(spot: OfficeSpot, layout: OfficeLayoutName): { x: number; z: number } {
+  const grid = gridFor(layout);
+  return {
+    x: (spot.x / 100 - 0.5) * grid.width,
+    z: (spot.y / 100 - 0.5) * grid.depth,
+  };
+}
+
+export interface OfficeMovement {
+  /** Ruang kerja asal karyawan (0 atau 1), dipakai untuk filter. */
+  homeRoomIndex: number;
+  /** Ruangan tujuan pada tahap ini: kerja, kopi, meeting, atau koridor. */
   roomIndex: number;
-  /** Kursi kerja ke-berapa dalam ruangan yang sama. */
   slot: number;
+  /** Posisi tujuan dalam persentase seluruh peta. */
+  x: number;
+  y: number;
+  /** Posisi tahap sebelumnya, dipakai fallback 2D untuk keyframe. */
+  from: OfficeSpot;
+  /** Waypoint koridor yang harus dilalui sebelum tujuan (tanpa `from`/tujuan). */
+  via: OfficeSpot[];
   facing: "left" | "right" | "front";
   activity: OfficeActivity;
   walking: boolean;
   action?: { emoji: string; label: string };
 }
 
+interface RouteNode {
+  spot: OfficeSpot;
+  via: OfficeSpot[];
+  roomIndex: number;
+  activity: OfficeActivity;
+  facing: "left" | "right" | "front";
+  walking: boolean;
+  action?: { emoji: string; label: string };
+}
+
+const WORK_DOOR = { x: 50, y: 96 } as const;
+const SHARED_BACK_DOOR = { x: 50, y: 4 } as const;
+const COFFEE_SIDE_DOOR = { x: 96, y: 50 } as const;
+const MEETING_SIDE_DOOR = { x: 4, y: 50 } as const;
+const COFFEE_SPOT = { x: 50, y: 58 } as const;
+const MEETING_SPOT = { x: 50, y: 70 } as const;
+const ROUTE_STEPS = 8;
+
 /**
- * Rute simulasi tetap di dalam satu ruangan departemen:
- * meja → sudut kopi → meja meeting → meja, terus berulang.
+ * Rute: meja → Ruang Kopi → Ruang Meeting → meja.
+ * Setiap perpindahan antar ruangan lewat pintu dan titik koridor, sehingga
+ * tidak ada gerakan yang menembus dinding.
  */
+function routeFor(employee: OfficeEmployee, index: number, home: number, slot: number): RouteNode[] {
+  const deskLocal = ROOM_DESK_SPOTS[slot % ROOM_DESK_SPOTS.length];
+  const desk = spotLocal(home, deskLocal.x, deskLocal.y);
+  const homeDoor = spotLocal(home, WORK_DOOR.x, WORK_DOOR.y);
+  const coffeeDoor = spotLocal(COFFEE_ROOM_INDEX, SHARED_BACK_DOOR.x, SHARED_BACK_DOOR.y);
+  const coffeeSpot = spotLocal(COFFEE_ROOM_INDEX, COFFEE_SPOT.x, COFFEE_SPOT.y);
+  const coffeeSideDoor = spotLocal(COFFEE_ROOM_INDEX, COFFEE_SIDE_DOOR.x, COFFEE_SIDE_DOOR.y);
+  const meetingSideDoor = spotLocal(MEETING_ROOM_INDEX, MEETING_SIDE_DOOR.x, MEETING_SIDE_DOOR.y);
+  const meetingSpot = spotLocal(MEETING_ROOM_INDEX, MEETING_SPOT.x, MEETING_SPOT.y);
+  const meetingDoor = spotLocal(MEETING_ROOM_INDEX, SHARED_BACK_DOOR.x, SHARED_BACK_DOOR.y);
+  const homeGap = spotCorridor(homeDoor.x, 50);
+  const meetingGap = spotCorridor(meetingDoor.x, 50);
+  const centerGap = spotCorridor(50, 50);
+  const coffeeGap = spotCorridor(50, coffeeSideDoor.y);
+
+  const toCoffeeVia = home === 0
+    ? [homeGap, coffeeDoor]
+    : [homeGap, centerGap, spotCorridor(coffeeDoor.x, 50), coffeeDoor];
+  const toMeetingVia = [coffeeSideDoor, coffeeGap, meetingSideDoor];
+  const backVia = home === 0
+    ? [meetingDoor, meetingGap, centerGap, spotCorridor(homeDoor.x, 50), homeDoor]
+    : [meetingDoor, meetingGap, homeDoor];
+
+  return [
+    {
+      spot: desk, via: [], roomIndex: home,
+      activity: activityFor(employee, index), facing: "front", walking: false,
+    },
+    {
+      spot: homeDoor, via: [], roomIndex: home,
+      activity: "walking", facing: "front", walking: true,
+      action: { emoji: "🚶", label: "Menuju koridor" },
+    },
+    {
+      spot: coffeeSpot, via: toCoffeeVia, roomIndex: COFFEE_ROOM_INDEX,
+      activity: "walking", facing: "front", walking: true,
+      action: { emoji: "🚶", label: "Menuju Ruang Kopi" },
+    },
+    {
+      spot: coffeeSpot, via: [], roomIndex: COFFEE_ROOM_INDEX,
+      activity: "drinking", facing: "front", walking: false,
+      action: { emoji: "☕", label: "Ngopi di Ruang Kopi" },
+    },
+    {
+      spot: meetingSpot, via: toMeetingVia, roomIndex: MEETING_ROOM_INDEX,
+      activity: "walking", facing: "left", walking: true,
+      action: { emoji: "🚶", label: "Menuju Ruang Meeting" },
+    },
+    {
+      spot: meetingSpot, via: [], roomIndex: MEETING_ROOM_INDEX,
+      activity: "talking", facing: "front", walking: false,
+      action: { emoji: "💬", label: "Diskusi di Ruang Meeting" },
+    },
+    {
+      spot: homeDoor, via: backVia, roomIndex: home,
+      activity: "walking", facing: "front", walking: true,
+      action: { emoji: "🚶", label: "Kembali ke meja" },
+    },
+    {
+      spot: desk, via: [], roomIndex: home,
+      activity: "walking", facing: desk.x > 50 ? "left" : "right", walking: true,
+      action: { emoji: "🚶", label: "Kembali ke meja" },
+    },
+  ];
+}
+
 export function movementFor(employee: OfficeEmployee, index: number, tick: number, slot = index): OfficeMovement {
-  const roomIndex = roomIndexFor(employee.department?.name);
+  const home = roomIndexFor(employee.department?.name);
   const safeSlot = ((slot % ROOM_DESK_SPOTS.length) + ROOM_DESK_SPOTS.length) % ROOM_DESK_SPOTS.length;
-  const desk = ROOM_DESK_SPOTS[safeSlot];
-  const step = (((tick + index) % 6) + 6) % 6;
-  const atDesk = { roomIndex, slot: safeSlot, x: desk.x, y: desk.y };
+  const route = routeFor(employee, index, home, safeSlot);
+  const step = (((tick + index) % ROUTE_STEPS) + ROUTE_STEPS) % ROUTE_STEPS;
+  const node = route[step];
+  const previous = route[(step - 1 + ROUTE_STEPS) % ROUTE_STEPS];
 
   if (employee.availability === "OFFLINE") {
-    return { ...atDesk, facing: "front", activity: "offline", walking: false };
+    const atDesk = route[0];
+    return {
+      homeRoomIndex: home,
+      roomIndex: home,
+      slot: safeSlot,
+      x: atDesk.spot.x,
+      y: atDesk.spot.y,
+      from: atDesk.spot,
+      via: [],
+      facing: "front",
+      activity: "offline",
+      walking: false,
+    };
   }
 
-  switch (step) {
-    case 0:
-      return { ...atDesk, facing: "front", activity: activityFor(employee, index), walking: false };
-    case 1:
-      return {
-        roomIndex, slot: safeSlot, x: ROOM_COFFEE_SPOT.x, y: ROOM_COFFEE_SPOT.y,
-        facing: "right", activity: "walking", walking: true,
-        action: { emoji: "🚶", label: "Menuju sudut kopi" },
-      };
-    case 2:
-      return {
-        roomIndex, slot: safeSlot, x: ROOM_COFFEE_SPOT.x, y: ROOM_COFFEE_SPOT.y,
-        facing: "front", activity: "drinking", walking: false,
-        action: { emoji: "☕", label: "Ngopi sebentar" },
-      };
-    case 3:
-      return {
-        roomIndex, slot: safeSlot, x: ROOM_MEETING_SPOT.x, y: ROOM_MEETING_SPOT.y,
-        facing: "left", activity: "walking", walking: true,
-        action: { emoji: "🚶", label: "Menuju meja meeting" },
-      };
-    case 4:
-      return {
-        roomIndex, slot: safeSlot, x: ROOM_MEETING_SPOT.x, y: ROOM_MEETING_SPOT.y,
-        facing: "front", activity: "talking", walking: false,
-        action: { emoji: "💬", label: "Diskusi tim" },
-      };
-    default:
-      return {
-        ...atDesk,
-        facing: desk.x > 50 ? "left" : "right",
-        activity: "walking", walking: true,
-        action: { emoji: "🚶", label: "Kembali ke meja" },
-      };
-  }
+  return {
+    homeRoomIndex: home,
+    roomIndex: node.roomIndex,
+    slot: safeSlot,
+    x: node.spot.x,
+    y: node.spot.y,
+    from: previous.spot,
+    via: node.via,
+    facing: node.facing,
+    activity: node.activity,
+    walking: node.walking,
+    action: node.action,
+  };
 }
 
 /**
- * Menyusun pergerakan sekaligus membagi kursi untuk karyawan yang satu divisi.
- * Jadwal tiap orang di-offset memakai urutan asli agar tidak berjalan bersamaan.
+ * Menyusun pergerakan sekaligus membagi kursi untuk karyawan yang satu ruang
+ * kerja. Jadwal tiap orang di-offset memakai urutan asli agar tidak berjalan
+ * bersamaan.
  */
 export function movementsFor(employees: OfficeEmployee[], tick: number): Array<{ employee: OfficeEmployee; index: number; move: OfficeMovement }> {
   const slotByRoom = new Map<number, number>();
   return employees.map((employee, index) => {
-    const roomIndex = roomIndexFor(employee.department?.name);
-    const slot = slotByRoom.get(roomIndex) ?? 0;
-    slotByRoom.set(roomIndex, slot + 1);
+    const home = roomIndexFor(employee.department?.name);
+    const slot = slotByRoom.get(home) ?? 0;
+    slotByRoom.set(home, slot + 1);
     return { employee, index, move: movementFor(employee, index, tick, slot) };
   });
 }

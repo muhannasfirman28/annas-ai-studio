@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  DEPARTMENT_ROOMS,
-  ROOM_COFFEE_SPOT,
+  COFFEE_ROOM_INDEX,
+  MEETING_ROOM_INDEX,
+  OFFICE_ROOMS,
   ROOM_DESK_SPOTS,
   ROOM_GEOMETRY,
-  ROOM_MEETING_SPOT,
   activityFor,
   gridFor,
   localToRoom,
@@ -15,7 +15,11 @@ import {
   officeChatFeed,
   roomIndexFor,
   roomOrigin,
+  spotCorridor,
+  spotLocal,
+  spotToWorld,
   type OfficeEmployee,
+  type OfficeSpot,
 } from "./office-types";
 
 const person = (availability: string): OfficeEmployee => ({
@@ -32,6 +36,23 @@ const team = (): OfficeEmployee[] => [
   { ...person("AVAILABLE"), id: "c", name: "Meilin Designer" },
   { ...person("OFFLINE"), id: "d", name: "Wei Offline" },
 ];
+
+const SEED_DEPARTMENTS = [
+  "Executive",
+  "Technology",
+  "Operations",
+  "Software Development",
+  "Creative & Design",
+  "Artificial Intelligence",
+  "Data & Analytics",
+  "Quality Assurance & Security",
+];
+
+const seededTeam = (): OfficeEmployee[] => SEED_DEPARTMENTS.map((department, index) => ({
+  ...person(index === 7 ? "OFFLINE" : "AVAILABLE"),
+  id: `seed-${index}`,
+  department: { name: department },
+}));
 
 test("karyawan tersedia bergantian mengetik dan membaca", () => {
   assert.equal(activityFor(person("AVAILABLE"), 0), "typing");
@@ -72,69 +93,121 @@ test("tanpa pasangan aktif tidak ada obrolan", () => {
   assert.deepEqual(officeChat([], 0), []);
 });
 
-test("delapan departemen punya ruangan unik dan grid 4×2 serta 2×4", () => {
-  assert.equal(DEPARTMENT_ROOMS.length, 8);
-  assert.equal(new Set(DEPARTMENT_ROOMS.map((room) => room.name)).size, 8);
-
-  const wide = gridFor("wide");
-  assert.deepEqual([wide.columns, wide.rows], [4, 2]);
-  assert.equal(wide.origins.length, 8);
-  assert.ok(wide.width > wide.depth);
-
-  const tall = gridFor("tall");
-  assert.deepEqual([tall.columns, tall.rows], [2, 4]);
-  assert.equal(tall.origins.length, 8);
-  assert.ok(tall.depth > tall.width);
+test("empat ruangan terdiri dari dua ruang kerja, kopi, dan meeting", () => {
+  assert.equal(OFFICE_ROOMS.length, 4);
+  assert.deepEqual(OFFICE_ROOMS.map((room) => room.kind), ["work", "work", "coffee", "meeting"]);
+  assert.deepEqual(OFFICE_ROOMS[0].departments, SEED_DEPARTMENTS.slice(0, 4));
+  assert.deepEqual(OFFICE_ROOMS[1].departments, SEED_DEPARTMENTS.slice(4));
+  assert.deepEqual(OFFICE_ROOMS[2].departments, []);
+  assert.deepEqual(OFFICE_ROOMS[3].departments, []);
+  assert.equal(new Set(SEED_DEPARTMENTS).size, 8);
 });
 
-test("divisi tidak dikenal tetap mendapat ruangan yang stabil", () => {
+test("grid selalu 2×2 di desktop dan mobile", () => {
+  for (const layout of ["wide", "tall"] as const) {
+    const grid = gridFor(layout);
+    assert.deepEqual([grid.columns, grid.rows], [2, 2]);
+    assert.equal(grid.origins.length, 4);
+    assert.ok(grid.width > grid.depth);
+  }
+  assert.deepEqual(roomOrigin(0, "wide"), { x: -(ROOM_GEOMETRY.width + ROOM_GEOMETRY.gap) / 2, z: -(ROOM_GEOMETRY.depth + ROOM_GEOMETRY.gap) / 2 });
+});
+
+test("urutan seed terbagi 4+4 ke dua ruang kerja", () => {
+  SEED_DEPARTMENTS.forEach((department, index) => {
+    assert.equal(roomIndexFor(department), index < 4 ? 0 : 1, department);
+  });
+
+  const plan = movementsFor(seededTeam(), 0);
+  assert.equal(plan.filter((item) => item.move.homeRoomIndex === 0).length, 4);
+  assert.equal(plan.filter((item) => item.move.homeRoomIndex === 1).length, 4);
+  assert.deepEqual(plan.filter((item) => item.move.homeRoomIndex === 0).map((item) => item.move.slot), [0, 1, 2, 3]);
+  assert.deepEqual(plan.filter((item) => item.move.homeRoomIndex === 1).map((item) => item.move.slot), [0, 1, 2, 3]);
+});
+
+test("divisi tidak dikenal tetap mendapat ruang kerja yang stabil", () => {
   const first = roomIndexFor("Divisi Baru");
   const second = roomIndexFor("divisi baru");
-  assert.ok(first >= 0 && first < DEPARTMENT_ROOMS.length);
+  assert.ok(first === 0 || first === 1);
   assert.equal(first, second);
-  assert.equal(roomIndexFor("Technology"), 1);
 });
 
-test("rute jalan berputar di dalam satu ruangan: meja → kopi → meeting → meja", () => {
+test("rute meja → Ruang Kopi → Ruang Meeting → meja lewat koridor", () => {
   const employee = { ...person("AVAILABLE"), department: { name: "Technology" } };
-  const room = roomIndexFor("Technology");
-  const atDesk = movementFor(employee, 0, 0);
-  const toCoffee = movementFor(employee, 0, 1);
-  const drink = movementFor(employee, 0, 2);
-  const toMeeting = movementFor(employee, 0, 3);
-  const talk = movementFor(employee, 0, 4);
-  const back = movementFor(employee, 0, 5);
+  const stages = Array.from({ length: 8 }, (_, tick) => movementFor(employee, 0, tick));
 
-  assert.deepEqual({ x: atDesk.x, y: atDesk.y }, ROOM_DESK_SPOTS[0]);
-  assert.equal(atDesk.roomIndex, room);
-  assert.equal(atDesk.walking, false);
-  assert.equal(toCoffee.walking, true);
-  assert.deepEqual({ x: toCoffee.x, y: toCoffee.y }, ROOM_COFFEE_SPOT);
-  assert.equal(toCoffee.roomIndex, room);
-  assert.equal(drink.activity, "drinking");
-  assert.equal(drink.walking, false);
-  assert.equal(toMeeting.walking, true);
-  assert.deepEqual({ x: toMeeting.x, y: toMeeting.y }, ROOM_MEETING_SPOT);
-  assert.equal(talk.activity, "talking");
-  assert.equal(back.walking, true);
-  assert.deepEqual({ x: back.x, y: back.y }, ROOM_DESK_SPOTS[0]);
-  assert.equal(movementFor(employee, 0, 6).x, ROOM_DESK_SPOTS[0].x);
+  assert.equal(stages[0].roomIndex, 0);
+  assert.equal(stages[0].walking, false);
+  assert.deepEqual(spotOf(stages[0]), spotLocal(0, ROOM_DESK_SPOTS[0].x, ROOM_DESK_SPOTS[0].y));
+
+  assert.equal(stages[1].roomIndex, 0);
+  assert.equal(stages[1].walking, true);
+
+  assert.equal(stages[2].roomIndex, COFFEE_ROOM_INDEX);
+  assert.equal(stages[2].walking, true);
+  assert.ok(stages[2].via.some((spot) => spot.roomIndex === -1));
+  assert.ok(stages[2].via.some((spot) => spot.x === spotLocal(COFFEE_ROOM_INDEX, 50, 4).x));
+
+  assert.equal(stages[3].roomIndex, COFFEE_ROOM_INDEX);
+  assert.equal(stages[3].activity, "drinking");
+  assert.equal(stages[3].walking, false);
+
+  assert.equal(stages[4].roomIndex, MEETING_ROOM_INDEX);
+  assert.equal(stages[4].walking, true);
+  assert.ok(stages[4].via.some((spot) => spot.roomIndex === -1 && spot.x === 50));
+
+  assert.equal(stages[5].roomIndex, MEETING_ROOM_INDEX);
+  assert.equal(stages[5].activity, "talking");
+  assert.equal(stages[5].walking, false);
+
+  assert.equal(stages[6].roomIndex, 0);
+  assert.equal(stages[6].walking, true);
+  assert.ok(stages[6].via.length >= 4);
+
+  assert.equal(stages[7].roomIndex, 0);
+  assert.equal(stages[7].walking, true);
+  assert.deepEqual(spotOf(stages[7]), spotOf(stages[0]));
+  assert.deepEqual(spotOf(movementFor(employee, 0, 8)), spotOf(stages[0]));
+});
+
+function spotOf(move: { roomIndex: number; x: number; y: number }): OfficeSpot {
+  return { roomIndex: move.roomIndex, x: move.x, y: move.y };
+}
+
+test("setiap langkah lintas ruangan menyentuh koridor lebih dulu", () => {
+  const employee = { ...person("AVAILABLE"), department: { name: "Creative & Design" } };
+  for (let tick = 0; tick < 16; tick += 1) {
+    const move = movementFor(employee, tick, tick, 0);
+    const path = [move.from, ...move.via, spotOf(move)];
+    path.forEach((spot) => {
+      assert.ok(spot.x >= 0 && spot.x <= 100, `x di luar peta: ${spot.x}`);
+      assert.ok(spot.y >= 0 && spot.y <= 100, `y di luar peta: ${spot.y}`);
+    });
+    for (let index = 0; index < path.length - 1; index += 1) {
+      const from = path[index];
+      const to = path[index + 1];
+      assert.ok(
+        from.roomIndex === to.roomIndex || from.roomIndex === -1 || to.roomIndex === -1,
+        `ruangan ${from.roomIndex} ke ${to.roomIndex} tidak lewat koridor`,
+      );
+    }
+  }
 });
 
 test("jadwal tiap karyawan di-offset agar tidak berjalan bersamaan", () => {
   const employee = person("AVAILABLE");
   assert.equal(movementFor(employee, 0, 0).walking, false);
   assert.equal(movementFor(employee, 1, 0).walking, true);
-  assert.equal(movementFor(employee, 2, 0).activity, "drinking");
-  assert.equal(movementFor(employee, 3, 0).walking, true);
+  assert.equal(movementFor(employee, 2, 0).walking, true);
+  assert.equal(movementFor(employee, 3, 0).activity, "drinking");
 });
 
-test("karyawan offline tetap di meja ruangannya dan tidak berjalan", () => {
+test("karyawan offline tetap di meja ruang kerjanya dan tidak berjalan", () => {
   const employee = { ...person("OFFLINE"), department: { name: "Operations" } };
   for (let tick = 0; tick < 12; tick += 1) {
     const move = movementFor(employee, 5, tick);
-    assert.deepEqual({ x: move.x, y: move.y }, ROOM_DESK_SPOTS[5 % ROOM_DESK_SPOTS.length]);
-    assert.equal(move.roomIndex, roomIndexFor("Operations"));
+    assert.deepEqual(spotOf(move), spotLocal(0, ROOM_DESK_SPOTS[1].x, ROOM_DESK_SPOTS[1].y));
+    assert.equal(move.homeRoomIndex, 0);
     assert.equal(move.walking, false);
     assert.equal(move.activity, "offline");
     assert.equal(move.action, undefined);
@@ -144,42 +217,23 @@ test("karyawan offline tetap di meja ruangannya dan tidak berjalan", () => {
 test("tik negatif tetap menghasilkan rute yang valid", () => {
   const move = movementFor(person("AVAILABLE"), 0, -1);
   assert.equal(move.walking, true);
-  assert.deepEqual({ x: move.x, y: move.y }, ROOM_DESK_SPOTS[0]);
+  assert.deepEqual(spotOf(move), spotLocal(0, ROOM_DESK_SPOTS[0].x, ROOM_DESK_SPOTS[0].y));
 });
 
-test("karyawan satu divisi mendapat kursi berbeda di ruangan yang sama", () => {
-  const people: OfficeEmployee[] = [
-    { ...person("AVAILABLE"), id: "a", department: { name: "Technology" } },
-    { ...person("AVAILABLE"), id: "b", department: { name: "Technology" } },
-    { ...person("BUSY"), id: "c", department: { name: "Executive" } },
-  ];
-  const plan = movementsFor(people, 0);
+test("posisi lokal dan global masih bisa dikonversi ke dunia three.js", () => {
+  for (const layout of ["wide", "tall"] as const) {
+    for (const roomIndex of [0, 1, COFFEE_ROOM_INDEX, MEETING_ROOM_INDEX]) {
+      const local = localToRoom(roomIndex, layout, 50, 50);
+      const origin = roomOrigin(roomIndex, layout);
+      assert.ok(Math.abs(local.x - origin.x) < 0.001);
+      assert.ok(Math.abs(local.z - origin.z) < 0.001);
 
-  assert.equal(plan[0].move.slot, 0);
-  assert.equal(plan[1].move.slot, 1);
-  assert.equal(plan[0].move.roomIndex, plan[1].move.roomIndex);
-  assert.notEqual(plan[0].move.roomIndex, plan[2].move.roomIndex);
-  assert.deepEqual({ x: plan[0].move.x, y: plan[0].move.y }, ROOM_DESK_SPOTS[0]);
-  assert.deepEqual({ x: plan[1].move.x, y: plan[1].move.y }, ROOM_COFFEE_SPOT);
-  assert.deepEqual({ x: movementFor(people[1], 1, -1, 1).x, y: movementFor(people[1], 1, -1, 1).y }, ROOM_DESK_SPOTS[1]);
-});
-
-test("seluruh titik rute berada di dalam ruangan departemen yang sama", () => {
-  for (const room of DEPARTMENT_ROOMS) {
-    const employee = { ...person("AVAILABLE"), department: { name: room.name } };
-    const expected = roomIndexFor(room.name);
-    for (let tick = 0; tick < 12; tick += 1) {
-      const move = movementFor(employee, tick, tick);
-      assert.equal(move.roomIndex, expected);
-      assert.ok(move.x >= 10 && move.x <= 90);
-      assert.ok(move.y >= 10 && move.y <= 90);
-
-      for (const layout of ["wide", "tall"] as const) {
-        const point = localToRoom(move.roomIndex, layout, move.x, move.y);
-        const origin = roomOrigin(move.roomIndex, layout);
-        assert.ok(Math.abs(point.x - origin.x) <= ROOM_GEOMETRY.width / 2 + 0.001);
-        assert.ok(Math.abs(point.z - origin.z) <= ROOM_GEOMETRY.depth / 2 + 0.001);
-      }
+      const global = spotLocal(roomIndex, 50, 50);
+      const world = spotToWorld(global, layout);
+      assert.ok(Math.abs(world.x - origin.x) < 0.001);
+      assert.ok(Math.abs(world.z - origin.z) < 0.001);
     }
+    const corridor = spotToWorld(spotCorridor(50, 50), layout);
+    assert.deepEqual(corridor, { x: 0, z: 0 });
   }
 });

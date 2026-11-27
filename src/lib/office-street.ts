@@ -105,10 +105,10 @@ export interface StreetBounds {
   grid: ReturnType<typeof gridFor>;
 }
 
-/** Jalan selalu diletakkan di luar grid delapan ruangan. */
+/** Jalan selalu diletakkan di luar grid 2×2 empat ruangan. */
 export function streetBounds(layout: OfficeLayoutName = "wide"): StreetBounds {
   const grid = gridFor(layout);
-  const marginX = layout === "tall" ? 7 : 8;
+  const marginX = 8;
   const marginZ = 7;
   return {
     layout,

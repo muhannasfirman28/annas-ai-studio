@@ -121,7 +121,6 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
   transition: opacity .25s ease, filter .25s ease;
 }
 .office-3d-room-sign-dim { opacity: .38; filter: grayscale(.65); }
-.office-backdrop-tall { display: none; }
 .office-3d-bubble {
   display: flex;
   flex-direction: column;
@@ -179,17 +178,22 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
 .office-pendant-a { left: 22%; }
 .office-pendant-b { right: 22%; }
 
-/* Delapan ruangan departemen: 4×2 di desktop, 2×4 di mobile */
+/* Empat ruangan: 2×2 di desktop maupun mobile */
+.office-map {
+  position: relative;
+  min-width: 0;
+}
 .office-rooms {
   position: relative;
   z-index: 2;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 .office-room {
   display: flex;
   min-width: 0;
+  min-height: 310px;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid rgba(148, 180, 222, .26);
@@ -224,7 +228,8 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
 .office-room-head small { margin-left: auto; flex-shrink: 0; color: #93a4bf; font-size: 9px; font-weight: 500; }
 .office-room-floor {
   position: relative;
-  height: 208px;
+  flex: 1;
+  min-height: 260px;
   overflow: hidden;
   background:
     repeating-linear-gradient(90deg, rgba(148, 180, 222, .05) 0 1px, transparent 1px 28px),
@@ -310,6 +315,17 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
   background: rgba(15, 23, 42, .85);
   color: #fbbf24;
   box-shadow: 0 8px 16px rgba(0, 0, 0, .28);
+}
+.office-coffee-table {
+  position: absolute;
+  z-index: 2;
+  height: 26px;
+  width: 46px;
+  transform: translate(-50%, -50%);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #8b6a4e, #5b4331);
+  box-shadow: 0 8px 14px rgba(0, 0, 0, .28), inset 0 2px 0 rgba(255, 255, 255, .12);
+  pointer-events: none;
 }
 
 /* Meja tetap di ruangan; karyawan bergerak di atasnya */
@@ -401,11 +417,19 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
   border-radius: 0 6px 6px 0;
 }
 
-/* Aktor: posisi left/top dianimasikan oleh Motion */
+/* Aktor melintasi seluruh peta supaya bisa berpindah ruang lewat koridor. */
+.office-actors {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+/* Posisi left/top dianimasikan oleh Motion mengikuti waypoint koridor. */
 .office-actor {
   position: absolute;
   width: 78px;
   transform: translate(-50%, -46%);
+  pointer-events: auto;
 }
 .office-actor .office-chair {
   position: absolute;
@@ -643,27 +667,25 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
 .office-desk-active .office-nameplate { border-color: rgba(56, 189, 248, .8); }
 
 @media (max-width: 640px) {
-  .office-floor { min-height: 980px; padding: 58px 8px 20px; }
+  .office-floor { min-height: 720px; padding: 58px 8px 20px; }
   .office-floor-3d { min-height: 420px; padding: 0; }
   .office-scene-3d { height: 420px; min-height: 420px; }
   .office-3d-legend { max-width: calc(100% - 20px); white-space: normal; text-align: center; }
   .office-3d-hint { display: none; }
-  .office-backdrop-wide { display: none; }
-  .office-backdrop-tall { display: block; }
   .office-rooms { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .office-room { min-height: 230px; }
   .office-room-head { padding: 5px 6px; font-size: 10px; }
   .office-room-head small { font-size: 8px; }
-  .office-room-floor { height: 184px; }
-  .office-room .office-actor { width: 52px; }
-  .office-room .office-chat-bubble { max-width: 92px; font-size: 9px; }
-  .office-room .office-nameplate { padding: 3px 5px; font-size: 8px; }
+  .office-room-floor { min-height: 190px; }
   .office-room .office-desk-furniture { width: 58px; height: 60px; }
   .office-room .office-monitor { width: 52px; height: 32px; border-width: 4px; }
   .office-room .office-keyboard { width: 42px; height: 6px; }
   .office-room .office-keyboard i { width: 5px; }
-  .office-mini-meeting { transform: translate(-50%, -50%) scale(.78); }
-  .office-actor { width: 64px; }
+  .office-room .office-chat-bubble { max-width: 92px; font-size: 9px; }
+  .office-room .office-nameplate { padding: 3px 5px; font-size: 8px; }
+  .office-actor { width: 56px; }
   .office-meeting-table { width: 76px; }
+  .office-coffee-table { height: 22px; width: 38px; }
   .office-chat-bubble { max-width: 116px; font-size: 10px; }
   .office-zone-label { font-size: 8px; }
   .office-sign small { display: none; }

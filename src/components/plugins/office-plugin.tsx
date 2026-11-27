@@ -12,22 +12,21 @@ import { OfficeBackdrop } from "./office-backdrop";
 import { OfficeCharacter } from "./office-character";
 import {
   ACTIVITY_LABEL,
-  DEPARTMENT_ROOMS,
-  ROOM_COFFEE_SPOT,
+  OFFICE_ROOMS,
   ROOM_DESK_SPOTS,
-  ROOM_MEETING_SPOT,
   movementsFor,
   officeChat,
   officeChatFeed,
   roomIndexFor,
   type OfficeEmployee,
+  type OfficeSpot,
 } from "./office-types";
 
 type EmployeesResponse = { employees: OfficeEmployee[] };
 
 const OfficeScene3D = dynamic(() => import("./office-scene-3d").then((module) => module.OfficeScene3D), {
   ssr: false,
-  loading: () => <div className="office-3d-loading">Memuat delapan ruangan 3D…</div>,
+  loading: () => <div className="office-3d-loading">Memuat empat ruangan 3D…</div>,
 });
 
 export function OfficePlugin() {
@@ -68,7 +67,7 @@ export function OfficePlugin() {
   // Satu putaran menggerakkan rute jalan sekaligus mengganti obrolan.
   useEffect(() => {
     if (frozen) return;
-    const id = window.setInterval(() => setTick((value) => value + 1), 3600);
+    const id = window.setInterval(() => setTick((value) => value + 1), 4200);
     return () => window.clearInterval(id);
   }, [frozen]);
 
@@ -91,7 +90,7 @@ export function OfficePlugin() {
     <div className="animate-in space-y-5">
       <PageHeader
         title="Kantor Virtual"
-        subtitle="Visualisasi delapan ruangan departemen: karyawan bergerak antar meja, sudut kopi, dan meja meeting di dalam ruangannya sendiri. Di luar gedung ada jalan kota dengan mobil dan pejalan kaki. Semua gerakan serta obrolan adalah simulasi visual."
+        subtitle="Visualisasi empat ruangan: dua ruang kerja berisi 4+4 karyawan, Ruang Kopi, dan Ruang Meeting. Karyawan berjalan lewat koridor dari meja ke kopi, ke meeting, lalu kembali. Di luar gedung ada jalan kota dengan mobil dan pejalan kaki. Semua gerakan serta obrolan adalah simulasi visual."
         actions={<>
           <Badge className="border border-electric/30 bg-electric/10 text-electric">Simulasi visual</Badge>
           <Button variant="outline" size="sm" onClick={() => setPaused((v) => !v)} aria-pressed={paused}>
@@ -107,8 +106,8 @@ export function OfficePlugin() {
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_300px]">
             <Card className="min-w-0 overflow-hidden p-0">
               <CardHeader
-                title="8 ruangan departemen"
-                subtitle={`${shown.length} karyawan di ruangannya masing-masing — simulasi, bukan pemantauan langsung.`}
+                title="4 ruangan kantor"
+                subtitle={`${shown.length} karyawan · 2 ruang kerja + Ruang Kopi + Ruang Meeting — simulasi, bukan pemantauan langsung.`}
                 action={<Select aria-label="Filter divisi" value={department} onChange={(e) => setDepartment(e.target.value)} className="h-8 w-44 text-[13px]">
                   <option value="">Semua divisi</option>
                   {departments.map((d) => <option key={d} value={d}>{d}</option>)}
@@ -130,87 +129,106 @@ export function OfficePlugin() {
                 ) : (
                   <>
                     <OfficeBackdrop />
-                    <div className="office-sign"><span>ANNAS AI STUDIO</span><small>Delapan ruangan · simulasi langsung</small></div>
+                    <div className="office-sign"><span>ANNAS AI STUDIO</span><small>4 ruangan · simulasi langsung</small></div>
 
-                    <div className="office-rooms">
-                      {DEPARTMENT_ROOMS.map((room, roomIndex) => {
-                        const people = movements.filter((item) => item.move.roomIndex === roomIndex);
-                        const dim = focusRoomIndex !== null && focusRoomIndex !== roomIndex;
-                        return (
-                          <section
-                            key={room.name}
-                            className={cn("office-room", dim && "office-room-dim")}
-                            style={{ "--room-accent": room.color } as CSSProperties}
-                            aria-label={`Ruangan ${room.label}`}
-                          >
-                            <header className="office-room-head">
-                              <span className="office-room-dot" aria-hidden="true" />
-                              <span className="truncate">{room.label}</span>
-                              <small>{people.length} orang</small>
-                            </header>
-                            <div className="office-room-floor">
-                              <div className="office-mini-coffee" style={{ left: `${ROOM_COFFEE_SPOT.x}%`, top: `${ROOM_COFFEE_SPOT.y}%` }} aria-hidden="true">
-                                <Coffee className="h-3.5 w-3.5" />
-                              </div>
-                              <div className="office-mini-meeting" style={{ left: `${ROOM_MEETING_SPOT.x}%`, top: `${ROOM_MEETING_SPOT.y}%` }} aria-hidden="true">
-                                <span className="office-meeting-table"><i /><i /><i /></span>
-                              </div>
+                    <div className="office-map">
+                      <div className="office-rooms">
+                        {OFFICE_ROOMS.map((room, roomIndex) => {
+                          const residents = movements.filter((item) => item.move.homeRoomIndex === roomIndex);
+                          const dim = room.kind === "work" && focusRoomIndex !== null && focusRoomIndex !== roomIndex;
+                          return (
+                            <section
+                              key={room.name}
+                              className={cn("office-room", dim && "office-room-dim")}
+                              style={{ "--room-accent": room.color } as CSSProperties}
+                              aria-label={`Ruangan ${room.name}`}
+                            >
+                              <header className="office-room-head">
+                                <span className="office-room-dot" aria-hidden="true" />
+                                <span className="truncate">{room.name}</span>
+                                <small>{room.kind === "work" ? `${residents.length} orang` : "bersama"}</small>
+                              </header>
+                              <div className="office-room-floor">
+                                {room.kind === "work" && residents.map(({ employee, move }) => {
+                                  const desk = ROOM_DESK_SPOTS[move.slot % ROOM_DESK_SPOTS.length];
+                                  return (
+                                    <div
+                                      key={`desk-${employee.id}`}
+                                      className={cn("office-desk-furniture", (hoveredId === employee.id || selectedId === employee.id) && "office-desk-active")}
+                                      style={{ left: `${desk.x}%`, top: `${desk.y}%` }}
+                                      aria-hidden="true"
+                                    >
+                                      <span className="office-monitor"><span className="office-monitor-screen"><i /><i /><i /></span><span className="office-monitor-stand" /></span>
+                                      <span className="office-keyboard"><i /><i /><i /><i /><i /><i /></span>
+                                      <span className="office-mug" />
+                                    </div>
+                                  );
+                                })}
+                                {room.kind === "work" && residents.length === 0 && <span className="office-room-empty">Tidak ada karyawan</span>}
 
-                              {people.map(({ employee, move }) => {
-                                const desk = ROOM_DESK_SPOTS[move.slot % ROOM_DESK_SPOTS.length];
-                                return (
-                                  <div
-                                    key={`desk-${employee.id}`}
-                                    className={cn("office-desk-furniture", (hoveredId === employee.id || selectedId === employee.id) && "office-desk-active")}
-                                    style={{ left: `${desk.x}%`, top: `${desk.y}%` }}
-                                    aria-hidden="true"
-                                  >
-                                    <span className="office-monitor"><span className="office-monitor-screen"><i /><i /><i /></span><span className="office-monitor-stand" /></span>
-                                    <span className="office-keyboard"><i /><i /><i /><i /><i /><i /></span>
-                                    <span className="office-mug" />
+                                {room.kind === "coffee" && (
+                                  <>
+                                    <div className="office-zone" style={{ left: "50%", top: "22%" }} aria-hidden="true">
+                                      <span className="office-zone-label">Mesin kopi</span>
+                                      <span className="office-coffee-machine"><Coffee className="h-4 w-4" /></span>
+                                    </div>
+                                    {[26, 74].map((x) => <span key={x} className="office-coffee-table" style={{ left: `${x}%`, top: "64%" }} aria-hidden="true" />)}
+                                  </>
+                                )}
+                                {room.kind === "meeting" && (
+                                  <div className="office-zone" style={{ left: "50%", top: "38%" }} aria-hidden="true">
+                                    <span className="office-zone-label">Meja meeting</span>
+                                    <span className="office-meeting-table"><i /><i /><i /></span>
                                   </div>
-                                );
-                              })}
+                                )}
+                              </div>
+                            </section>
+                          );
+                        })}
+                      </div>
 
-                              {people.length === 0 && <span className="office-room-empty">Tidak ada karyawan</span>}
-
-                              {people.map(({ employee, index, move }) => {
-                                const line = chatBySpeaker.get(employee.id);
-                                return (
-                                  <motion.div
-                                    key={employee.id}
-                                    className="office-actor"
-                                    style={{ zIndex: move.walking ? 7 : 5 }}
-                                    initial={{ left: `${move.x}%`, top: `${move.y}%`, opacity: 0, scale: 0.82 }}
-                                    animate={{ left: `${move.x}%`, top: `${move.y}%`, opacity: 1, scale: 1 }}
-                                    transition={{
-                                      left: { duration: frozen ? 0 : 2.6, ease: "easeInOut" },
-                                      top: { duration: frozen ? 0 : 2.6, ease: "easeInOut" },
-                                      opacity: { duration: 0.3 },
-                                      scale: { duration: 0.3 },
-                                    }}
-                                  >
-                                    <OfficeCharacter
-                                      employee={employee}
-                                      index={index}
-                                      activity={move.activity}
-                                      frozen={frozen}
-                                      selected={selectedId === employee.id}
-                                      walking={move.walking}
-                                      facing={move.facing}
-                                      action={move.action}
-                                      message={move.action ? undefined : line?.text}
-                                      emoji={line?.emoji}
-                                      onSelect={(id) => setSelectedId((cur) => (cur === id ? null : id))}
-                                      onHover={setHoveredId}
-                                    />
-                                  </motion.div>
-                                );
-                              })}
-                            </div>
-                          </section>
-                        );
-                      })}
+                      <div className="office-actors" aria-label="Karyawan bergerak melalui koridor antar ruangan">
+                        {movements.map(({ employee, index, move }) => {
+                          const line = chatBySpeaker.get(employee.id);
+                          const target: OfficeSpot = { roomIndex: move.roomIndex, x: move.x, y: move.y };
+                          const path = move.walking ? [move.from, ...move.via, target] : null;
+                          return (
+                            <motion.div
+                              key={employee.id}
+                              className="office-actor"
+                              style={{ zIndex: move.walking ? 7 : 5 }}
+                              initial={{ left: `${move.x}%`, top: `${move.y}%`, opacity: 0, scale: 0.82 }}
+                              animate={{
+                                left: path ? path.map((spot) => `${spot.x}%`) : `${move.x}%`,
+                                top: path ? path.map((spot) => `${spot.y}%`) : `${move.y}%`,
+                                opacity: 1,
+                                scale: 1,
+                              }}
+                              transition={{
+                                left: { duration: frozen ? 0 : 2.8, ease: "easeInOut" },
+                                top: { duration: frozen ? 0 : 2.8, ease: "easeInOut" },
+                                opacity: { duration: 0.3 },
+                                scale: { duration: 0.3 },
+                              }}
+                            >
+                              <OfficeCharacter
+                                employee={employee}
+                                index={index}
+                                activity={move.activity}
+                                frozen={frozen}
+                                selected={selectedId === employee.id}
+                                walking={move.walking}
+                                facing={move.facing}
+                                action={move.action}
+                                message={move.action ? undefined : line?.text}
+                                emoji={line?.emoji}
+                                onSelect={(id) => setSelectedId((cur) => (cur === id ? null : id))}
+                                onHover={setHoveredId}
+                              />
+                            </motion.div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </>
                 )}
@@ -263,7 +281,7 @@ export function OfficePlugin() {
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-[13px] font-medium">{employee.name}</span>
                           <span className="block truncate text-[11px] text-muted-foreground">
-                            {DEPARTMENT_ROOMS[move.roomIndex]?.label ?? "Lainnya"} · {ACTIVITY_LABEL[move.activity]}{move.action ? ` · ${move.action.label}` : ""}
+                            {OFFICE_ROOMS[move.homeRoomIndex]?.label ?? "Lainnya"} · {ACTIVITY_LABEL[move.activity]}{move.action ? ` · ${move.action.label}` : ""}
                           </span>
                         </span>
                         <MessageCircle className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground", chatBySpeaker.has(employee.id) && "text-electric")} aria-hidden="true" />
@@ -279,10 +297,10 @@ export function OfficePlugin() {
                   <CardHeader title={selected.name} subtitle={selected.title} />
                   <div className="space-y-2 px-5 pb-5 text-[13px]">
                     <div className="flex justify-between gap-3"><span className="text-muted-foreground">Divisi</span><span>{selected.department?.name ?? "—"}</span></div>
-                    <div className="flex justify-between gap-3"><span className="text-muted-foreground">Ruangan</span><span>{DEPARTMENT_ROOMS[roomIndexFor(selected.department?.name)]?.label ?? "Lainnya"}</span></div>
+                    <div className="flex justify-between gap-3"><span className="text-muted-foreground">Ruangan</span><span>{OFFICE_ROOMS[roomIndexFor(selected.department?.name)]?.name ?? "Lainnya"}</span></div>
                     <div className="flex justify-between gap-3"><span className="text-muted-foreground">Status</span><span>{AVAIL_LABEL[selected.availability ?? "AVAILABLE"] ?? selected.availability}</span></div>
                     <div className="flex justify-between gap-3"><span className="text-muted-foreground">Aktivitas</span><span>{selectedActivity ? ACTIVITY_LABEL[selectedActivity] : "—"}</span></div>
-                    <p className="rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">Rute jalan, aktivitas, dan obrolan di dalam ruangan departemen hanya simulasi visual. Status diambil dari data karyawan.</p>
+                    <p className="rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">Rute jalan, aktivitas, dan obrolan hanya simulasi visual. Status diambil dari data karyawan.</p>
                     <Link href={`/employees/${selected.id}`} className="inline-flex h-9 w-full items-center justify-center rounded-lg bg-electric px-4 font-medium text-white transition-opacity hover:opacity-90">Lihat profil karyawan</Link>
                   </div>
                 </Card>
@@ -292,7 +310,7 @@ export function OfficePlugin() {
 
               <Card className="p-4">
                 <p className="flex items-center gap-2 text-[12px] font-medium"><Users className="h-4 w-4 text-electric" /> Rute simulasi</p>
-                <p className="mt-1 text-[12px] text-muted-foreground">Meja kerja → sudut kopi → meja meeting → kembali ke meja, semuanya di dalam ruangan departemen masing-masing. Karyawan tidak berpindah ruangan. Mobil dan pejalan kaki memakai rute jalan tersendiri di luar gedung.</p>
+                <p className="mt-1 text-[12px] text-muted-foreground">Meja di ruang kerja → koridor → Ruang Kopi → koridor → Ruang Meeting → koridor → meja. Karyawan lewat pintu dan tidak menembus dinding. Mobil dan pejalan kaki memakai rute jalan tersendiri di luar gedung.</p>
               </Card>
             </div>
           </div>

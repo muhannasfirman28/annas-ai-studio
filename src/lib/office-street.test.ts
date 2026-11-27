@@ -71,10 +71,10 @@ test("setiap jalan dan trotoar punya pelaku bergerak", () => {
   assert.ok(PEDESTRIAN_ROUTES.some((route) => route.speed < 0));
 });
 
-test("rute jalan mengikuti grid 4×2 dan 2×4 serta tetap di luar ruangan", () => {
+test("rute jalan mengikuti grid 2×2 dan tetap di luar ruangan", () => {
   for (const layout of ["wide", "tall"] as const) {
     const bounds = streetBounds(layout);
-    assert.deepEqual([bounds.grid.columns, bounds.grid.rows], layout === "tall" ? [2, 4] : [4, 2]);
+    assert.deepEqual([bounds.grid.columns, bounds.grid.rows], [2, 2]);
 
     const cars = carRoutesFor(layout);
     const pedestrians = pedestrianRoutesFor(layout);

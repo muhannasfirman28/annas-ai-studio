@@ -15,22 +15,22 @@ import {
   type StreetBounds,
 } from "@/lib/office-street";
 import {
-  DEPARTMENT_ROOMS,
-  ROOM_COFFEE_SPOT,
+  OFFICE_ROOMS,
   ROOM_DESK_SPOTS,
   ROOM_GEOMETRY,
-  ROOM_MEETING_SPOT,
   gridFor,
   localToRoom,
   roomOrigin,
-  type DepartmentRoom,
+  spotToWorld,
   type OfficeEmployee,
   type OfficeLayoutName,
   type OfficeMovement,
+  type OfficeRoom,
+  type OfficeSpot,
 } from "./office-types";
 
 const FIGURE_HEIGHT = 1.55;
-const WALK_SPEED = 3.1;
+const WALK_SPEED = 6.4;
 const PI = Math.PI;
 
 function useOfficeLayout(): OfficeLayoutName {
@@ -203,28 +203,43 @@ function Worker({ employee, index, movement, message, frozen, dim, selected, onS
   const { object, scale, floorOffset, phase, walk } = useWalkingFigure(index, dim);
   const root = useRef<THREE.Group>(null);
   const layoutRef = useRef(layout);
-  const point = useMemo(
-    () => localToRoom(movement.roomIndex, layout, movement.x, movement.y),
-    [movement.roomIndex, movement.x, movement.y, layout],
+  const target = useMemo(() => {
+    const spot: OfficeSpot = { roomIndex: movement.roomIndex, x: movement.x, y: movement.y };
+    const point = spotToWorld(spot, layout);
+    return new THREE.Vector3(point.x, 0, point.z);
+  }, [movement.roomIndex, movement.x, movement.y, layout]);
+  const waypoints = useMemo(
+    () => [
+      ...movement.via.map((spot) => {
+        const point = spotToWorld(spot, layout);
+        return new THREE.Vector3(point.x, 0, point.z);
+      }),
+      target.clone(),
+    ],
+    [movement.via, target, layout],
   );
-  const target = useMemo(() => new THREE.Vector3(point.x, 0, point.z), [point]);
+  const queue = useRef<THREE.Vector3[]>([]);
   const position = useRef(target.clone());
 
-  // Grid berubah saat viewport berpindah 4×2 ↔ 2×4; jangan ajak jalan melintasi kota.
+  // Layout seluruhnya 2×2; tetap jaga lompatan saat kanvas berubah ukuran.
   useEffect(() => {
     if (layoutRef.current === layout) return;
     layoutRef.current = layout;
+    queue.current = [];
     position.current.copy(target);
     if (root.current) root.current.position.copy(target);
   }, [layout, target]);
 
   useEffect(() => {
     if (frozen) {
+      queue.current = [];
       position.current.copy(target);
       if (root.current) root.current.position.copy(target);
       walk.current.value = 0;
+      return;
     }
-  }, [frozen, target, walk]);
+    queue.current = waypoints.map((point) => point.clone());
+  }, [frozen, waypoints, walk]);
 
   useFrame((_, delta) => {
     const group = root.current;
@@ -235,16 +250,21 @@ function Worker({ employee, index, movement, message, frozen, dim, selected, onS
     }
 
     const dt = Math.min(delta, 0.05);
-    const offset = target.clone().sub(position.current);
-    const distance = offset.length();
-    if (distance > 0.015) {
-      // Fase langkah mengikuti jarak tempuh, bukan waktu saja, supaya kaki tidak selancar.
-      const step = Math.min(distance, WALK_SPEED * dt);
-      position.current.addScaledVector(offset.divideScalar(distance), step);
-      phase.current.value += step * 6.1;
-      walk.current.value = Math.min(1, walk.current.value + dt * 6);
-      const heading = Math.atan2(offset.x, offset.z);
-      group.rotation.y = angleTowards(group.rotation.y, heading, dt * 5);
+    const next = queue.current[0];
+    if (next) {
+      const offset = next.clone().sub(position.current);
+      const distance = offset.length();
+      if (distance > 0.02) {
+        // Fase langkah mengikuti jarak tempuh, bukan waktu saja, supaya kaki tidak selancar.
+        const step = Math.min(distance, WALK_SPEED * dt);
+        position.current.addScaledVector(offset.divideScalar(distance), step);
+        phase.current.value += step * 6.1;
+        walk.current.value = Math.min(1, walk.current.value + dt * 6);
+        const heading = Math.atan2(offset.x, offset.z);
+        group.rotation.y = angleTowards(group.rotation.y, heading, dt * 5);
+      } else {
+        queue.current.shift();
+      }
     } else {
       walk.current.value = Math.max(0, walk.current.value - dt * 5);
     }
@@ -326,9 +346,9 @@ function Desk({ roomIndex, x, y, dim, highlight }: { roomIndex: number; x: numbe
   );
 }
 
-function CoffeeCorner({ roomIndex, dim }: { roomIndex: number; dim: boolean }) {
+function CoffeeCorner({ roomIndex, x, y, dim }: { roomIndex: number; x: number; y: number; dim: boolean }) {
   const layout = useOfficeLayout();
-  const spot = localToRoom(roomIndex, layout, ROOM_COFFEE_SPOT.x, ROOM_COFFEE_SPOT.y);
+  const spot = localToRoom(roomIndex, layout, x, y);
   return (
     <group position={[spot.x, 0, spot.z]}>
       <mesh position={[0, 0.45, 0]} castShadow>
@@ -352,9 +372,9 @@ function CoffeeCorner({ roomIndex, dim }: { roomIndex: number; dim: boolean }) {
   );
 }
 
-function MeetingArea({ roomIndex, dim }: { roomIndex: number; dim: boolean }) {
+function MeetingArea({ roomIndex, x, y, dim }: { roomIndex: number; x: number; y: number; dim: boolean }) {
   const layout = useOfficeLayout();
-  const spot = localToRoom(roomIndex, layout, ROOM_MEETING_SPOT.x, ROOM_MEETING_SPOT.y);
+  const spot = localToRoom(roomIndex, layout, x, y);
   return (
     <group position={[spot.x, 0, spot.z]}>
       <mesh position={[0, 0.72, 0]} castShadow receiveShadow>
@@ -385,12 +405,18 @@ function MeetingArea({ roomIndex, dim }: { roomIndex: number; dim: boolean }) {
   );
 }
 
-function DepartmentRoom({ room, index, active }: { room: DepartmentRoom; index: number; active: boolean }) {
+/** Dinding dipecah sesuai pintu: kerja membuka ke depan, kopi/meeting ke belakang dan samping. */
+function OfficeRoomShell({ room, index, active }: { room: OfficeRoom; index: number; active: boolean }) {
   const layout = useOfficeLayout();
   const origin = roomOrigin(index, layout);
   const dim = !active;
   const doorWidth = 2.4;
-  const sideWidth = (ROOM_GEOMETRY.width - doorWidth) / 2;
+  const sideX = (ROOM_GEOMETRY.width - doorWidth) / 2;
+  const sideZ = (ROOM_GEOMETRY.depth - doorWidth) / 2;
+  const frontDoor = room.kind === "work";
+  const backDoor = room.kind === "coffee" || room.kind === "meeting";
+  const rightDoor = room.kind === "coffee";
+  const leftDoor = room.kind === "meeting";
 
   return (
     <group position={[origin.x, 0, origin.z]}>
@@ -400,34 +426,50 @@ function DepartmentRoom({ room, index, active }: { room: DepartmentRoom; index: 
       </mesh>
       <gridHelper args={[ROOM_GEOMETRY.width, 8, dim ? "#313a4b" : "#4d5d7a", dim ? "#2b3342" : "#414f69"]} position={[0, 0.006, 0]} />
 
-      {/* Dinding belakang dan samping sengaja rendah supaya aktivitas tetap terlihat. */}
-      <mesh position={[0, 1.2, -ROOM_GEOMETRY.depth / 2]} receiveShadow>
-        <boxGeometry args={[ROOM_GEOMETRY.width, 2.4, 0.12]} />
-        <meshStandardMaterial color={dim ? "#182030" : "#243450"} roughness={0.9} />
-      </mesh>
-      {[-1, 1].map((side) => (
-        <mesh key={side} position={[(side * ROOM_GEOMETRY.width) / 2, 0.75, 0]} receiveShadow>
-          <boxGeometry args={[0.12, 1.5, ROOM_GEOMETRY.depth]} />
-          <meshStandardMaterial color={dim ? "#1b2433" : "#2b3a56"} transparent opacity={0.78} />
+      {/* Dinding sengaja rendah supaya aktivitas tetap terlihat dari kamera. */}
+      {backDoor ? [-1, 1].map((side) => (
+        <mesh key={`back-${side}`} position={[side * (doorWidth / 2 + sideX / 2), 1.2, -ROOM_GEOMETRY.depth / 2]} receiveShadow>
+          <boxGeometry args={[sideX, 2.4, 0.12]} />
+          <meshStandardMaterial color={dim ? "#182030" : "#243450"} roughness={0.9} />
         </mesh>
-      ))}
-      {[-1, 1].map((side) => (
-        <mesh key={`front-${side}`} position={[side * (doorWidth / 2 + sideWidth / 2), 0.5, ROOM_GEOMETRY.depth / 2]} receiveShadow>
-          <boxGeometry args={[sideWidth, 1, 0.12]} />
+      )) : (
+        <mesh position={[0, 1.2, -ROOM_GEOMETRY.depth / 2]} receiveShadow>
+          <boxGeometry args={[ROOM_GEOMETRY.width, 2.4, 0.12]} />
+          <meshStandardMaterial color={dim ? "#182030" : "#243450"} roughness={0.9} />
+        </mesh>
+      )}
+      {frontDoor ? [-1, 1].map((side) => (
+        <mesh key={`front-${side}`} position={[side * (doorWidth / 2 + sideX / 2), 0.5, ROOM_GEOMETRY.depth / 2]} receiveShadow>
+          <boxGeometry args={[sideX, 1, 0.12]} />
           <meshStandardMaterial color={dim ? "#1b2433" : "#2b3a56"} transparent opacity={0.72} />
         </mesh>
-      ))}
-      {[-1, 1].map((side) => (
-        <mesh key={`post-${side}`} position={[side * doorWidth / 2, 1.1, ROOM_GEOMETRY.depth / 2]} castShadow>
+      )) : (
+        <mesh position={[0, 0.5, ROOM_GEOMETRY.depth / 2]} receiveShadow>
+          <boxGeometry args={[ROOM_GEOMETRY.width, 1, 0.12]} />
+          <meshStandardMaterial color={dim ? "#1b2433" : "#2b3a56"} transparent opacity={0.72} />
+        </mesh>
+      )}
+      {([-1, 1] as const).map((side) => {
+        const hasDoor = (side === 1 && rightDoor) || (side === -1 && leftDoor);
+        return hasDoor ? [-1, 1].map((end) => (
+          <mesh key={`side-${side}-${end}`} position={[(side * ROOM_GEOMETRY.width) / 2, 0.75, end * (doorWidth / 2 + sideZ / 2)]} receiveShadow>
+            <boxGeometry args={[0.12, 1.5, sideZ]} />
+            <meshStandardMaterial color={dim ? "#1b2433" : "#2b3a56"} transparent opacity={0.78} />
+          </mesh>
+        )) : (
+          <mesh key={`side-${side}`} position={[(side * ROOM_GEOMETRY.width) / 2, 0.75, 0]} receiveShadow>
+            <boxGeometry args={[0.12, 1.5, ROOM_GEOMETRY.depth]} />
+            <meshStandardMaterial color={dim ? "#1b2433" : "#2b3a56"} transparent opacity={0.78} />
+          </mesh>
+        );
+      })}
+      {(frontDoor || backDoor) && [-1, 1].map((side) => (
+        <mesh key={`post-${side}`} position={[side * doorWidth / 2, 1.1, frontDoor ? ROOM_GEOMETRY.depth / 2 : -ROOM_GEOMETRY.depth / 2]} castShadow>
           <boxGeometry args={[0.1, 2.2, 0.12]} />
           <meshStandardMaterial color={dim ? "#394355" : "#8fa6c2"} metalness={0.4} roughness={0.5} />
         </mesh>
       ))}
-      <mesh position={[0, 2.2, ROOM_GEOMETRY.depth / 2]}>
-        <boxGeometry args={[doorWidth + 0.2, 0.12, 0.12]} />
-        <meshStandardMaterial color={dim ? "#394355" : "#8fa6c2"} metalness={0.4} roughness={0.5} />
-      </mesh>
-      <Html position={[0, 2.66, ROOM_GEOMETRY.depth / 2 + 0.06]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
+      <Html position={[0, 2.66, frontDoor ? ROOM_GEOMETRY.depth / 2 + 0.06 : -ROOM_GEOMETRY.depth / 2 - 0.06]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
         <span
           className={dim ? "office-3d-room-sign office-3d-room-sign-dim" : "office-3d-room-sign"}
           style={{ borderColor: room.color, boxShadow: `0 4px 18px ${room.color}55` }}
@@ -436,11 +478,17 @@ function DepartmentRoom({ room, index, active }: { room: DepartmentRoom; index: 
         </span>
       </Html>
 
-      {ROOM_DESK_SPOTS.map((spot, slot) => (
+      {room.kind === "work" && ROOM_DESK_SPOTS.map((spot, slot) => (
         <Desk key={slot} roomIndex={index} x={spot.x} y={spot.y} dim={dim} highlight={false} />
       ))}
-      <CoffeeCorner roomIndex={index} dim={dim} />
-      <MeetingArea roomIndex={index} dim={dim} />
+      {room.kind === "coffee" && (
+        <>
+          <CoffeeCorner roomIndex={index} x={50} y={20} dim={dim} />
+          <CoffeeCorner roomIndex={index} x={25} y={62} dim={dim} />
+          <CoffeeCorner roomIndex={index} x={75} y={62} dim={dim} />
+        </>
+      )}
+      {room.kind === "meeting" && <MeetingArea roomIndex={index} x={50} y={36} dim={dim} />}
     </group>
   );
 }
@@ -579,7 +627,7 @@ function spread(min: number, max: number, count: number): number[] {
   return Array.from({ length: count }, (_, index) => min + ((index + 0.5) / count) * (max - min));
 }
 
-/** Jalan, trotoar, bangkitan kota, dan perlengkapan jalan di luar delapan ruangan. */
+/** Jalan, trotoar, bangkitan kota, dan perlengkapan jalan di luar empat ruangan. */
 function Street({ layout }: { layout: OfficeLayoutName }) {
   const bounds = useMemo(() => streetBounds(layout), [layout]);
   const horizontalRoads = [bounds.north, bounds.south];
@@ -816,8 +864,13 @@ function Scene({ employees, movements, messages, frozen, focusRoomIndex, selecte
       />
       <CameraRig />
       <Street layout={layout} />
-      {DEPARTMENT_ROOMS.map((room, index) => (
-        <DepartmentRoom key={room.name} room={room} index={index} active={focusRoomIndex === null || focusRoomIndex === index} />
+      {OFFICE_ROOMS.map((room, index) => (
+        <OfficeRoomShell
+          key={room.name}
+          room={room}
+          index={index}
+          active={room.kind !== "work" || focusRoomIndex === null || focusRoomIndex === index}
+        />
       ))}
       {carRoutes.map((route) => <Car key={route.id} route={route} frozen={frozen} />)}
       {pedestrianRoutes.map((route) => <StreetPedestrian key={route.id} route={route} frozen={frozen} />)}
@@ -829,7 +882,7 @@ function Scene({ employees, movements, messages, frozen, focusRoomIndex, selecte
           movement={movements[index]}
           message={messages.get(employee.id)}
           frozen={frozen}
-          dim={focusRoomIndex !== null && focusRoomIndex !== movements[index].roomIndex}
+          dim={focusRoomIndex !== null && focusRoomIndex !== movements[index].homeRoomIndex}
           selected={selectedId === employee.id || hoveredId === employee.id}
           onSelect={onSelect}
           onHover={onHover}
@@ -856,7 +909,7 @@ export function OfficeScene3D(props: SceneProps) {
   }, []);
 
   return (
-    <div className="office-scene-3d" role="img" aria-label="Simulasi kota 3D: delapan ruangan departemen berisi karyawan yang bergerak di dalam ruangannya, dikelilingi jalan dengan mobil dan pejalan kaki. Ini bukan pemantauan karyawan nyata.">
+    <div className="office-scene-3d" role="img" aria-label="Simulasi kota 3D: dua ruang kerja berisi delapan karyawan, Ruang Kopi, dan Ruang Meeting. Karyawan berjalan lewat koridor antar ruangan; di luar ada jalan dengan mobil dan pejalan kaki. Ini bukan pemantauan karyawan nyata.">
       <Canvas
         shadows
         dpr={[1, 1.4]}
@@ -867,7 +920,7 @@ export function OfficeScene3D(props: SceneProps) {
           <Scene {...props} />
         </Suspense>
       </Canvas>
-      <div className="office-3d-legend">Simulasi visual · 8 ruangan departemen · mobil &amp; pejalan kaki bergerak · bukan pelacakan karyawan</div>
+      <div className="office-3d-legend">Simulasi visual · 2 ruang kerja + kopi + meeting · mobil &amp; pejalan kaki bergerak · bukan pelacakan karyawan</div>
       <div className="office-3d-hint" aria-hidden="true">Geser untuk memutar · scroll untuk zoom</div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { DEPARTMENT_ROOMS } from "./office-types";
+import { OFFICE_ROOMS } from "./office-types";
 
 const CITY_WINDOWS = Array.from({ length: 30 }, (_, i) => ({
   x: 306 + (i % 10) * 18,
@@ -15,7 +15,7 @@ function roomTiles(columns: number, rows: number) {
   const tileWidth = (width - gap * (columns - 1)) / columns;
   const tileHeight = (height - gap * (rows - 1)) / rows;
 
-  return DEPARTMENT_ROOMS.map((room, index) => {
+  return OFFICE_ROOMS.map((room, index) => {
     const column = index % columns;
     const row = Math.floor(index / columns);
     const x = left + column * (tileWidth + gap);
@@ -146,9 +146,8 @@ export function OfficeBackdrop() {
         <rect x="1094" y="300" width="12" height="18" rx="2" fill="#f8fafc" />
       </g>
 
-      {/* Delapan petak ruangan: 4×2 di desktop, 2×4 di layar sempit. */}
-      <g className="office-backdrop-wide">{roomTiles(4, 2)}</g>
-      <g className="office-backdrop-tall">{roomTiles(2, 4)}</g>
+      {/* Empat petak ruangan: dua ruang kerja, kopi, dan meeting. */}
+      <g>{roomTiles(2, 2)}</g>
 
       <rect width="1200" height="520" fill="url(#of-vignette)" />
     </svg>
