@@ -1,8 +1,34 @@
+import { DEPARTMENT_ROOMS } from "./office-types";
+
 const CITY_WINDOWS = Array.from({ length: 30 }, (_, i) => ({
   x: 306 + (i % 10) * 18,
   y: 178 + Math.floor(i / 10) * 17,
   on: i % 3 !== 1,
 }));
+
+function roomTiles(columns: number, rows: number) {
+  const left = 24;
+  const top = 132;
+  const width = 1152;
+  const height = 360;
+  const gap = 10;
+  const tileWidth = (width - gap * (columns - 1)) / columns;
+  const tileHeight = (height - gap * (rows - 1)) / rows;
+
+  return DEPARTMENT_ROOMS.map((room, index) => {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    const x = left + column * (tileWidth + gap);
+    const y = top + row * (tileHeight + gap);
+    return (
+      <g key={`${columns}-${room.name}`}>
+        <rect x={x} y={y} width={tileWidth} height={tileHeight} rx="8" fill="#0f1a2e" fillOpacity="0.34" stroke="#9fb8d6" strokeOpacity="0.3" strokeWidth="2" />
+        <rect x={x} y={y} width="6" height={tileHeight} rx="3" fill={room.color} fillOpacity="0.9" />
+        <text x={x + 18} y={y + 26} fill="#dbeafe" fillOpacity="0.62" fontSize="14" fontWeight="700" letterSpacing="1.2">{room.label}</text>
+      </g>
+    );
+  });
+}
 
 /** Latar kantor berbasis SVG: tidak bergantung gambar eksternal atau kredensial. */
 export function OfficeBackdrop() {
@@ -119,6 +145,10 @@ export function OfficeBackdrop() {
         <path d="M1084 284 H1114 V296 H1084 Z" fill="#475569" />
         <rect x="1094" y="300" width="12" height="18" rx="2" fill="#f8fafc" />
       </g>
+
+      {/* Delapan petak ruangan: 4×2 di desktop, 2×4 di layar sempit. */}
+      <g className="office-backdrop-wide">{roomTiles(4, 2)}</g>
+      <g className="office-backdrop-tall">{roomTiles(2, 4)}</g>
 
       <rect width="1200" height="520" fill="url(#of-vignette)" />
     </svg>

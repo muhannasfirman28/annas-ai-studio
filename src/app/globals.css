@@ -60,7 +60,7 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  min-height: 560px;
+  min-height: 660px;
   padding: 72px 22px 30px;
   border-radius: 0 0 1rem 1rem;
   background: linear-gradient(180deg, #263552, #2f3f59);
@@ -83,6 +83,45 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
   letter-spacing: .04em;
   pointer-events: none;
 }
+.office-3d-sign {
+  display: inline-block;
+  border: 1px solid rgba(150, 200, 245, .5);
+  border-radius: 4px;
+  background: rgba(16, 32, 56, .9);
+  padding: 3px 10px;
+  color: #cbe6ff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  white-space: nowrap;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .35);
+}
+.office-3d-hint {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  border-radius: 999px;
+  background: rgba(9, 16, 30, .6);
+  padding: 5px 10px;
+  color: #8fa4c0;
+  font-size: 10px;
+  pointer-events: none;
+}
+.office-3d-room-sign {
+  display: inline-block;
+  border: 1px solid;
+  border-radius: 5px;
+  background: rgba(12, 22, 40, .92);
+  padding: 3px 9px;
+  color: #e6f1ff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  white-space: nowrap;
+  transition: opacity .25s ease, filter .25s ease;
+}
+.office-3d-room-sign-dim { opacity: .38; filter: grayscale(.65); }
+.office-backdrop-tall { display: none; }
 .office-3d-bubble {
   display: flex;
   flex-direction: column;
@@ -139,6 +178,93 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
 }
 .office-pendant-a { left: 22%; }
 .office-pendant-b { right: 22%; }
+
+/* Delapan ruangan departemen: 4×2 di desktop, 2×4 di mobile */
+.office-rooms {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.office-room {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(148, 180, 222, .26);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(27, 42, 67, .94), rgba(17, 28, 46, .94));
+  box-shadow: 0 12px 26px rgba(4, 10, 22, .32);
+  transition: opacity .25s ease, filter .25s ease;
+}
+.office-room-dim { opacity: .32; filter: saturate(.35); }
+.office-room-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid rgba(148, 180, 222, .18);
+  border-left: 3px solid var(--room-accent, #60a5fa);
+  background: rgba(10, 20, 38, .7);
+  padding: 6px 8px;
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .03em;
+}
+.office-room-dot {
+  height: 7px;
+  width: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--room-accent, #60a5fa);
+  box-shadow: 0 0 8px var(--room-accent, #60a5fa);
+}
+.office-room-head small { margin-left: auto; flex-shrink: 0; color: #93a4bf; font-size: 9px; font-weight: 500; }
+.office-room-floor {
+  position: relative;
+  height: 208px;
+  overflow: hidden;
+  background:
+    repeating-linear-gradient(90deg, rgba(148, 180, 222, .05) 0 1px, transparent 1px 28px),
+    linear-gradient(180deg, #334158, #273044);
+}
+.office-room-empty {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: rgba(226, 232, 240, .45);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.office-mini-coffee,
+.office-mini-meeting {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.office-mini-coffee {
+  height: 26px;
+  width: 26px;
+  border: 1px solid rgba(251, 191, 36, .45);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, .85);
+  color: #fbbf24;
+}
+.office-mini-meeting { height: 32px; width: 58px; }
+.office-mini-meeting .office-meeting-table { transform: scale(.62); }
+.office-room .office-desk-furniture { width: 70px; height: 72px; transform: translate(-50%, -52%); }
+.office-room .office-monitor { width: 62px; height: 38px; }
+.office-room .office-keyboard { width: 52px; }
+.office-room .office-keyboard i { width: 6px; }
+.office-room .office-actor { width: 60px; transform: translate(-50%, -48%); }
+.office-room .office-chat-bubble { max-width: 110px; font-size: 10px; }
 
 /* Zona tujuan: ruang meeting & sudut kopi */
 .office-zone {
@@ -517,13 +643,26 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
 .office-desk-active .office-nameplate { border-color: rgba(56, 189, 248, .8); }
 
 @media (max-width: 640px) {
-  .office-floor { min-height: 600px; padding: 58px 8px 20px; }
+  .office-floor { min-height: 980px; padding: 58px 8px 20px; }
   .office-floor-3d { min-height: 420px; padding: 0; }
   .office-scene-3d { height: 420px; min-height: 420px; }
   .office-3d-legend { max-width: calc(100% - 20px); white-space: normal; text-align: center; }
+  .office-3d-hint { display: none; }
+  .office-backdrop-wide { display: none; }
+  .office-backdrop-tall { display: block; }
+  .office-rooms { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .office-room-head { padding: 5px 6px; font-size: 10px; }
+  .office-room-head small { font-size: 8px; }
+  .office-room-floor { height: 184px; }
+  .office-room .office-actor { width: 52px; }
+  .office-room .office-chat-bubble { max-width: 92px; font-size: 9px; }
+  .office-room .office-nameplate { padding: 3px 5px; font-size: 8px; }
+  .office-room .office-desk-furniture { width: 58px; height: 60px; }
+  .office-room .office-monitor { width: 52px; height: 32px; border-width: 4px; }
+  .office-room .office-keyboard { width: 42px; height: 6px; }
+  .office-room .office-keyboard i { width: 5px; }
+  .office-mini-meeting { transform: translate(-50%, -50%) scale(.78); }
   .office-actor { width: 64px; }
-  .office-desk-furniture { width: 76px; height: 78px; }
-  .office-monitor { width: 72px; height: 42px; }
   .office-meeting-table { width: 76px; }
   .office-chat-bubble { max-width: 116px; font-size: 10px; }
   .office-zone-label { font-size: 8px; }
