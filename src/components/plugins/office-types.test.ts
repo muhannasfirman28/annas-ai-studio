@@ -7,6 +7,7 @@ import {
   ROOM_DESK_SPOTS,
   ROOM_GEOMETRY,
   activityFor,
+  deskOwnersFor,
   gridFor,
   localToRoom,
   movementFor,
@@ -123,6 +124,18 @@ test("urutan seed terbagi 4+4 ke dua ruang kerja", () => {
   assert.equal(plan.filter((item) => item.move.homeRoomIndex === 1).length, 4);
   assert.deepEqual(plan.filter((item) => item.move.homeRoomIndex === 0).map((item) => item.move.slot), [0, 1, 2, 3]);
   assert.deepEqual(plan.filter((item) => item.move.homeRoomIndex === 1).map((item) => item.move.slot), [0, 1, 2, 3]);
+});
+
+test("setiap meja ruang kerja dipetakan ke satu karyawan secara stabil", () => {
+  const owners = deskOwnersFor(seededTeam());
+  assert.equal(owners.length, 8);
+  assert.deepEqual(owners.map((owner) => [owner.roomIndex, owner.slot]), [
+    [0, 0], [0, 1], [0, 2], [0, 3],
+    [1, 0], [1, 1], [1, 2], [1, 3],
+  ]);
+  assert.deepEqual(owners.map((owner) => owner.name), seededTeam().map((employee) => employee.name));
+  assert.equal(new Set(owners.map((owner) => `${owner.roomIndex}:${owner.slot}`)).size, 8);
+  assert.equal(owners[0].avatarColor, "#2563eb");
 });
 
 test("divisi tidak dikenal tetap mendapat ruang kerja yang stabil", () => {

@@ -14,6 +14,7 @@ import {
   ACTIVITY_LABEL,
   OFFICE_ROOMS,
   ROOM_DESK_SPOTS,
+  deskOwnersFor,
   movementsFor,
   officeChat,
   officeChatFeed,
@@ -57,6 +58,7 @@ export function OfficePlugin() {
   }, []);
 
   const employees = data?.employees ?? [];
+  const deskOwners = useMemo(() => deskOwnersFor(employees), [employees]);
   const departments = useMemo(() => [...new Set(employees.map((e) => e.department?.name).filter((n): n is string => Boolean(n)))].sort(), [employees]);
   const shown = useMemo(() => (department ? employees.filter((e) => e.department?.name === department) : employees), [employees, department]);
   const selected = employees.find((e) => e.id === selectedId) ?? null;
@@ -117,6 +119,7 @@ export function OfficePlugin() {
                 {show3D ? (
                   <OfficeScene3D
                     employees={shown}
+                    deskOwners={deskOwners}
                     movements={movements.map((item) => item.move)}
                     messages={bubbles}
                     frozen={frozen}
@@ -134,7 +137,7 @@ export function OfficePlugin() {
                     <div className="office-map">
                       <div className="office-rooms">
                         {OFFICE_ROOMS.map((room, roomIndex) => {
-                          const residents = movements.filter((item) => item.move.homeRoomIndex === roomIndex);
+                          const owners = deskOwners.filter((owner) => owner.roomIndex === roomIndex);
                           const dim = room.kind === "work" && focusRoomIndex !== null && focusRoomIndex !== roomIndex;
                           return (
                             <section
@@ -146,25 +149,26 @@ export function OfficePlugin() {
                               <header className="office-room-head">
                                 <span className="office-room-dot" aria-hidden="true" />
                                 <span className="truncate">{room.name}</span>
-                                <small>{room.kind === "work" ? `${residents.length} orang` : "bersama"}</small>
+                                <small>{room.kind === "work" ? `${owners.length} orang` : "bersama"}</small>
                               </header>
                               <div className="office-room-floor">
-                                {room.kind === "work" && residents.map(({ employee, move }) => {
-                                  const desk = ROOM_DESK_SPOTS[move.slot % ROOM_DESK_SPOTS.length];
+                                {room.kind === "work" && owners.map((owner) => {
+                                  const desk = ROOM_DESK_SPOTS[owner.slot % ROOM_DESK_SPOTS.length];
                                   return (
                                     <div
-                                      key={`desk-${employee.id}`}
-                                      className={cn("office-desk-furniture", (hoveredId === employee.id || selectedId === employee.id) && "office-desk-active")}
+                                      key={`desk-${owner.id}`}
+                                      className={cn("office-desk-furniture", (hoveredId === owner.id || selectedId === owner.id) && "office-desk-active")}
                                       style={{ left: `${desk.x}%`, top: `${desk.y}%` }}
                                       aria-hidden="true"
                                     >
                                       <span className="office-monitor"><span className="office-monitor-screen"><i /><i /><i /></span><span className="office-monitor-stand" /></span>
                                       <span className="office-keyboard"><i /><i /><i /><i /><i /><i /></span>
                                       <span className="office-mug" />
+                                      <span className="office-desk-nameplate"><i style={{ background: owner.avatarColor }} />{owner.shortName}</span>
                                     </div>
                                   );
                                 })}
-                                {room.kind === "work" && residents.length === 0 && <span className="office-room-empty">Tidak ada karyawan</span>}
+                                {room.kind === "work" && owners.length === 0 && <span className="office-room-empty">Tidak ada karyawan</span>}
 
                                 {room.kind === "coffee" && (
                                   <>
@@ -172,14 +176,30 @@ export function OfficePlugin() {
                                       <span className="office-zone-label">Mesin kopi</span>
                                       <span className="office-coffee-machine"><Coffee className="h-4 w-4" /></span>
                                     </div>
-                                    {[26, 74].map((x) => <span key={x} className="office-coffee-table" style={{ left: `${x}%`, top: "64%" }} aria-hidden="true" />)}
+                                    {[26, 74].map((x) => (
+                                      <span key={x} className="office-coffee-table" style={{ left: `${x}%`, top: "64%" }} aria-hidden="true">
+                                        <i className="office-coffee-cup" /><i className="office-coffee-cup" />
+                                      </span>
+                                    ))}
                                   </>
                                 )}
                                 {room.kind === "meeting" && (
-                                  <div className="office-zone" style={{ left: "50%", top: "38%" }} aria-hidden="true">
-                                    <span className="office-zone-label">Meja meeting</span>
-                                    <span className="office-meeting-table"><i /><i /><i /></span>
-                                  </div>
+                                  <>
+                                    <div className="office-zone" style={{ left: "50%", top: "24%" }} aria-hidden="true">
+                                      <span className="office-zone-label">Meja konferensi</span>
+                                    </div>
+                                    <div className="office-conference-set" style={{ left: "50%", top: "45%" }} aria-hidden="true">
+                                      <span className="office-conference-table"><i /><i /><i /><i /></span>
+                                      <span className="office-conference-chair office-conference-chair-left" />
+                                      <span className="office-conference-chair office-conference-chair-right" />
+                                      <span className="office-conference-chair office-conference-chair-top" />
+                                      <span className="office-conference-chair office-conference-chair-bottom" />
+                                    </div>
+                                    <div className="office-meeting-tv" aria-hidden="true">
+                                      <span className="office-meeting-tv-screen"><i /><i /><i /></span>
+                                      <small>AGENDA</small>
+                                    </div>
+                                  </>
                                 )}
                               </div>
                             </section>

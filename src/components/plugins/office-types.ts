@@ -206,6 +206,34 @@ export const ROOM_DESK_SPOTS = [
   { x: 64, y: 68 },
 ] as const;
 
+/** Pemilik tetap sebuah meja; dipakai nameplate 3D maupun fallback 2D. */
+export interface OfficeDeskOwner {
+  id: string;
+  name: string;
+  shortName: string;
+  avatarColor: string;
+  roomIndex: number;
+  slot: number;
+}
+
+/** Urutan data menentukan kursi, sehingga nameplate tidak berpindah saat difilter. */
+export function deskOwnersFor(employees: OfficeEmployee[]): OfficeDeskOwner[] {
+  const slotByRoom = new Map<number, number>();
+  return employees.map((employee) => {
+    const roomIndex = roomIndexFor(employee.department?.name);
+    const slot = slotByRoom.get(roomIndex) ?? 0;
+    slotByRoom.set(roomIndex, slot + 1);
+    return {
+      id: employee.id,
+      name: employee.name,
+      shortName: shortName(employee.name),
+      avatarColor: employee.avatarColor,
+      roomIndex,
+      slot: ((slot % ROOM_DESK_SPOTS.length) + ROOM_DESK_SPOTS.length) % ROOM_DESK_SPOTS.length,
+    };
+  });
+}
+
 /**
  * Posisi rute dinyatakan dalam persentase seluruh peta 2×2, bukan lokal
  * ruangan, supaya karyawan benar-benar berpindah ruang lewat koridor.

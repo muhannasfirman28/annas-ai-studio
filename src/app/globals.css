@@ -138,6 +138,29 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
 }
 .office-3d-bubble strong { color: #8cc8ff; font-size: 10px; }
 .office-3d-bubble-active { border-color: rgba(120, 190, 255, .8); background: rgba(18, 42, 74, .94); }
+.office-3d-nameplate,
+.office-3d-tv-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid rgba(148, 180, 222, .38);
+  border-radius: 999px;
+  background: rgba(10, 20, 38, .9);
+  padding: 2px 7px;
+  color: #e6f1ff;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, .3);
+  transition: opacity .25s ease, filter .25s ease;
+}
+.office-3d-nameplate i { height: 6px; width: 6px; flex-shrink: 0; border-radius: 50%; box-shadow: 0 0 5px currentColor; }
+.office-3d-nameplate-active { border-color: rgba(56, 189, 248, .9); background: rgba(18, 48, 82, .96); }
+.office-3d-nameplate-dim,
+.office-3d-tv-label-dim { opacity: .38; filter: grayscale(.65); }
+.office-3d-tv-label { border-color: rgba(125, 211, 252, .5); color: #bae6fd; font-size: 8px; letter-spacing: .12em; }
 .office-backdrop { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; }
 .office-floor::after {
   content: "";
@@ -244,26 +267,6 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
   font-size: 10px;
   white-space: nowrap;
 }
-.office-mini-coffee,
-.office-mini-meeting {
-  position: absolute;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-}
-.office-mini-coffee {
-  height: 26px;
-  width: 26px;
-  border: 1px solid rgba(251, 191, 36, .45);
-  border-radius: 8px;
-  background: rgba(15, 23, 42, .85);
-  color: #fbbf24;
-}
-.office-mini-meeting { height: 32px; width: 58px; }
-.office-mini-meeting .office-meeting-table { transform: scale(.62); }
 .office-room .office-desk-furniture { width: 70px; height: 72px; transform: translate(-50%, -52%); }
 .office-room .office-monitor { width: 62px; height: 38px; }
 .office-room .office-keyboard { width: 52px; }
@@ -271,7 +274,7 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
 .office-room .office-actor { width: 60px; transform: translate(-50%, -48%); }
 .office-room .office-chat-bubble { max-width: 110px; font-size: 10px; }
 
-/* Zona tujuan: ruang meeting & sudut kopi */
+/* Zona tujuan: Ruang Kopi dan Ruang Meeting */
 .office-zone {
   position: absolute;
   z-index: 2;
@@ -292,18 +295,71 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
   font-weight: 600;
   letter-spacing: .04em;
 }
-.office-meeting-table {
+.office-conference-set {
+  position: absolute;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.office-conference-table {
   display: flex;
-  width: 92px;
-  height: 36px;
+  width: 118px;
+  height: 44px;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  border-radius: 18px 18px 8px 8px;
+  gap: 9px;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 10px;
   background: linear-gradient(180deg, #9a7556, #6b4d38);
   box-shadow: 0 10px 18px rgba(0, 0, 0, .3), inset 0 2px 0 rgba(255, 255, 255, .12);
 }
-.office-meeting-table i { width: 16px; height: 16px; border-radius: 50%; background: #dbe4ef; opacity: .65; }
+.office-conference-table i { width: 13px; height: 9px; border-radius: 2px; background: #dbe4ef; opacity: .65; }
+.office-conference-chair {
+  position: absolute;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #3d4a64, #283345);
+  box-shadow: 0 5px 10px rgba(0, 0, 0, .25);
+}
+.office-conference-chair-left,
+.office-conference-chair-right { top: 50%; height: 22px; width: 14px; transform: translateY(-50%); }
+.office-conference-chair-left { left: -16px; }
+.office-conference-chair-right { right: -16px; }
+.office-conference-chair-top,
+.office-conference-chair-bottom { left: 50%; height: 12px; width: 22px; transform: translateX(-50%); }
+.office-conference-chair-top { top: -15px; }
+.office-conference-chair-bottom { bottom: -15px; }
+.office-meeting-tv {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 2px solid #111b2c;
+  border-radius: 5px;
+  background: #111b2c;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, .35);
+  pointer-events: none;
+}
+.office-meeting-tv-screen {
+  display: flex;
+  width: 58px;
+  height: 30px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: 5px;
+  border-radius: 2px;
+  background: linear-gradient(135deg, #0e7490, #155e75);
+  box-shadow: inset 0 0 8px rgba(125, 211, 252, .25);
+}
+.office-meeting-tv-screen i { height: 3px; border-radius: 2px; background: #d7f4ff; opacity: .8; }
+.office-meeting-tv-screen i:nth-child(2) { width: 78%; }
+.office-meeting-tv-screen i:nth-child(3) { width: 52%; }
+.office-meeting-tv small { color: #bae6fd; font-size: 7px; font-weight: 700; letter-spacing: .12em; }
 .office-coffee-machine {
   display: flex;
   height: 34px;
@@ -319,13 +375,36 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
 .office-coffee-table {
   position: absolute;
   z-index: 2;
+  display: flex;
   height: 26px;
   width: 46px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   transform: translate(-50%, -50%);
   border-radius: 8px;
   background: linear-gradient(180deg, #8b6a4e, #5b4331);
   box-shadow: 0 8px 14px rgba(0, 0, 0, .28), inset 0 2px 0 rgba(255, 255, 255, .12);
   pointer-events: none;
+}
+.office-coffee-cup {
+  position: relative;
+  height: 11px;
+  width: 9px;
+  border-radius: 2px 2px 4px 4px;
+  background: #f5f1e8;
+  box-shadow: 0 3px 0 #d6dfe9;
+}
+.office-coffee-cup::after {
+  content: "";
+  position: absolute;
+  right: -4px;
+  top: 2px;
+  height: 5px;
+  width: 4px;
+  border: 1.5px solid #f5f1e8;
+  border-left: 0;
+  border-radius: 0 4px 4px 0;
 }
 
 /* Meja tetap di ruangan; karyawan bergerak di atasnya */
@@ -646,6 +725,31 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
   background: rgba(30, 41, 59, .96);
 }
 .office-chat-emoji { margin-right: 4px; }
+.office-desk-nameplate {
+  position: absolute;
+  bottom: -18px;
+  left: 50%;
+  z-index: 5;
+  display: flex;
+  max-width: 74px;
+  align-items: center;
+  gap: 3px;
+  transform: translateX(-50%);
+  overflow: hidden;
+  border: 1px solid rgba(148, 180, 222, .32);
+  border-radius: 999px;
+  background: rgba(10, 20, 38, .92);
+  padding: 2px 6px;
+  color: #e6f1ff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: 0 5px 12px rgba(0, 0, 0, .28);
+}
+.office-desk-nameplate i { height: 6px; width: 6px; flex-shrink: 0; border-radius: 50%; }
+.office-desk-active .office-desk-nameplate { border-color: rgba(56, 189, 248, .9); background: rgba(18, 48, 82, .96); }
 .office-nameplate {
   position: relative;
   z-index: 5;
@@ -683,9 +787,16 @@ body { @apply bg-background text-foreground font-sans text-[14px] leading-relaxe
   .office-room .office-keyboard i { width: 5px; }
   .office-room .office-chat-bubble { max-width: 92px; font-size: 9px; }
   .office-room .office-nameplate { padding: 3px 5px; font-size: 8px; }
+  .office-room .office-desk-nameplate { max-width: 56px; bottom: -15px; padding: 2px 4px; font-size: 8px; }
   .office-actor { width: 56px; }
-  .office-meeting-table { width: 76px; }
-  .office-coffee-table { height: 22px; width: 38px; }
+  .office-conference-table { width: 88px; height: 36px; gap: 6px; }
+  .office-conference-table i { width: 9px; }
+  .office-conference-chair-left, .office-conference-chair-right { width: 10px; height: 18px; }
+  .office-conference-chair-left { left: -12px; }
+  .office-conference-chair-right { right: -12px; }
+  .office-meeting-tv { top: 5px; right: 5px; }
+  .office-meeting-tv-screen { height: 24px; width: 46px; }
+  .office-coffee-table { height: 22px; width: 38px; gap: 4px; }
   .office-chat-bubble { max-width: 116px; font-size: 10px; }
   .office-zone-label { font-size: 8px; }
   .office-sign small { display: none; }

@@ -22,6 +22,7 @@ import {
   localToRoom,
   roomOrigin,
   spotToWorld,
+  type OfficeDeskOwner,
   type OfficeEmployee,
   type OfficeLayoutName,
   type OfficeMovement,
@@ -297,7 +298,15 @@ function Worker({ employee, index, movement, message, frozen, dim, selected, onS
   );
 }
 
-function Desk({ roomIndex, x, y, dim, highlight }: { roomIndex: number; x: number; y: number; dim: boolean; highlight: boolean }) {
+function Desk({ roomIndex, x, y, slot, owner, dim, highlight }: {
+  roomIndex: number;
+  x: number;
+  y: number;
+  slot: number;
+  owner?: OfficeDeskOwner;
+  dim: boolean;
+  highlight: boolean;
+}) {
   const layout = useOfficeLayout();
   const spot = localToRoom(roomIndex, layout, x, y);
   return (
@@ -342,11 +351,28 @@ function Desk({ roomIndex, x, y, dim, highlight }: { roomIndex: number; x: numbe
         <boxGeometry args={[0.52, 0.58, 0.08]} />
         <meshStandardMaterial color={dim ? "#242b3a" : "#303a52"} />
       </mesh>
+      {owner && (
+        <Html
+          position={[slot % 2 === 1 ? 1.6 : 0, 1.06 + (slot % 2) * 0.32, 0.42]}
+          center
+          distanceFactor={30}
+          zIndexRange={[30, 5]}
+          calculatePosition={clampBubblePosition}
+          style={{ pointerEvents: "none" }}
+        >
+          <span
+            className={dim ? "office-3d-nameplate office-3d-nameplate-dim" : highlight ? "office-3d-nameplate office-3d-nameplate-active" : "office-3d-nameplate"}
+          >
+            <i style={{ background: owner.avatarColor }} aria-hidden="true" />
+            {owner.shortName}
+          </span>
+        </Html>
+      )}
     </group>
   );
 }
 
-function CoffeeCorner({ roomIndex, x, y, dim }: { roomIndex: number; x: number; y: number; dim: boolean }) {
+function CoffeeMachine({ roomIndex, x, y, dim }: { roomIndex: number; x: number; y: number; dim: boolean }) {
   const layout = useOfficeLayout();
   const spot = localToRoom(roomIndex, layout, x, y);
   return (
@@ -372,41 +398,140 @@ function CoffeeCorner({ roomIndex, x, y, dim }: { roomIndex: number; x: number; 
   );
 }
 
-function MeetingArea({ roomIndex, x, y, dim }: { roomIndex: number; x: number; y: number; dim: boolean }) {
+function CoffeeCup({ position, dim }: { position: [number, number, number]; dim: boolean }) {
+  return (
+    <group position={position}>
+      <mesh position={[0, 0.01, 0]}>
+        <cylinderGeometry args={[0.12, 0.12, 0.015, 14]} />
+        <meshStandardMaterial color={dim ? "#3d4657" : "#dce6f2"} roughness={0.5} />
+      </mesh>
+      <mesh position={[0, 0.085, 0]} castShadow>
+        <cylinderGeometry args={[0.075, 0.065, 0.13, 14]} />
+        <meshStandardMaterial color={dim ? "#6d5745" : "#f5f1e8"} roughness={0.42} />
+      </mesh>
+      <mesh position={[0, 0.153, 0]}>
+        <cylinderGeometry args={[0.064, 0.064, 0.008, 14]} />
+        <meshStandardMaterial color={dim ? "#4b382d" : "#7b4a2d"} />
+      </mesh>
+      <mesh position={[0.088, 0.085, 0]}>
+        <torusGeometry args={[0.032, 0.011, 8, 12]} />
+        <meshStandardMaterial color={dim ? "#6d5745" : "#f5f1e8"} roughness={0.42} />
+      </mesh>
+    </group>
+  );
+}
+
+function CoffeeTable({ roomIndex, x, y, dim }: { roomIndex: number; x: number; y: number; dim: boolean }) {
   const layout = useOfficeLayout();
   const spot = localToRoom(roomIndex, layout, x, y);
   return (
     <group position={[spot.x, 0, spot.z]}>
-      <mesh position={[0, 0.72, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[0.8, 0.8, 0.08, 24]} />
-        <meshStandardMaterial color={dim ? "#4d4039" : "#5a4b43"} roughness={0.6} />
+      <mesh position={[0, 0.64, 0]} castShadow receiveShadow>
+        <boxGeometry args={[1.5, 0.08, 0.85]} />
+        <meshStandardMaterial color={dim ? "#4b4038" : "#8a6a4e"} roughness={0.66} />
       </mesh>
-      <mesh position={[0, 0.36, 0]} castShadow>
-        <cylinderGeometry args={[0.14, 0.2, 0.72, 12]} />
-        <meshStandardMaterial color={dim ? "#232936" : "#2b3346"} />
+      {[-0.62, 0.62].flatMap((dx) => [-0.32, 0.32].map((dz) => (
+        <mesh key={`${dx}-${dz}`} position={[dx, 0.32, dz]} castShadow>
+          <boxGeometry args={[0.07, 0.64, 0.07]} />
+          <meshStandardMaterial color={dim ? "#272d39" : "#4d3c2d"} />
+        </mesh>
+      )))}
+      <CoffeeCup position={[-0.32, 0.68, -0.12]} dim={dim} />
+      <CoffeeCup position={[0.34, 0.68, 0.14]} dim={dim} />
+      {[-1.05, 1.05].map((dx) => (
+        <group key={dx} position={[dx, 0, 0]}>
+          <mesh position={[0, 0.45, 0]} castShadow>
+            <boxGeometry args={[0.42, 0.08, 0.42]} />
+            <meshStandardMaterial color={dim ? "#262d3c" : "#35415a"} />
+          </mesh>
+          <mesh position={[dx > 0 ? 0.19 : -0.19, 0.72, 0]} castShadow>
+            <boxGeometry args={[0.08, 0.5, 0.42]} />
+            <meshStandardMaterial color={dim ? "#2b3343" : "#3d4a64"} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+function ConferenceTable({ roomIndex, x, y, dim }: { roomIndex: number; x: number; y: number; dim: boolean }) {
+  const layout = useOfficeLayout();
+  const spot = localToRoom(roomIndex, layout, x, y);
+  return (
+    <group position={[spot.x, 0, spot.z]}>
+      <mesh position={[0, 0.74, 0]} castShadow receiveShadow>
+        <boxGeometry args={[3.2, 0.1, 1.2]} />
+        <meshStandardMaterial color={dim ? "#4d4039" : "#6c513c"} roughness={0.6} />
       </mesh>
-      {[0, 1, 2].map((seat) => {
-        const angle = (seat / 3) * Math.PI * 2;
-        return (
-          <group key={seat} position={[Math.cos(angle) * 1.25, 0, Math.sin(angle) * 1.25]} rotation={[0, -angle + Math.PI / 2, 0]}>
-            <mesh position={[0, 0.45, 0]} castShadow>
-              <boxGeometry args={[0.42, 0.09, 0.42]} />
-              <meshStandardMaterial color={dim ? "#262d3c" : "#333e56"} />
-            </mesh>
-            <mesh position={[0, 0.72, 0.2]} castShadow>
-              <boxGeometry args={[0.42, 0.5, 0.08]} />
-              <meshStandardMaterial color={dim ? "#2b3343" : "#3b4760"} />
-            </mesh>
-          </group>
-        );
-      })}
+      {[-1.35, 1.35].flatMap((dx) => [-0.42, 0.42].map((dz) => (
+        <mesh key={`${dx}-${dz}`} position={[dx, 0.35, dz]} castShadow>
+          <boxGeometry args={[0.1, 0.7, 0.1]} />
+          <meshStandardMaterial color={dim ? "#232936" : "#2b3346"} />
+        </mesh>
+      )))}
+      {[-1, 0, 1].flatMap((dx) => [-1, 1].map((side) => (
+        <group key={`${dx}-${side}`} position={[dx, 0, side * 1.02]}>
+          <mesh position={[0, 0.45, 0]} castShadow>
+            <boxGeometry args={[0.44, 0.09, 0.44]} />
+            <meshStandardMaterial color={dim ? "#262d3c" : "#333e56"} />
+          </mesh>
+          <mesh position={[0, 0.72, side * 0.2]} castShadow>
+            <boxGeometry args={[0.44, 0.5, 0.08]} />
+            <meshStandardMaterial color={dim ? "#2b3343" : "#3b4760"} />
+          </mesh>
+        </group>
+      )))}
+      <mesh position={[0, 0.805, 0]} rotation={[-PI / 2, 0, 0]}>
+        <planeGeometry args={[1.05, 0.5]} />
+        <meshStandardMaterial color={dim ? "#34445a" : "#d7e5f0"} roughness={0.8} />
+      </mesh>
       {!dim && <pointLight position={[0, 1.3, 0]} color="#ffd8a8" intensity={0.6} distance={2.4} />}
     </group>
   );
 }
 
+/** TV dipasang di dinding kanan Ruang Meeting yang tidak punya pintu. */
+function MeetingTV({ dim }: { dim: boolean }) {
+  const screen = dim ? "#203a4d" : "#0f6f8c";
+  return (
+    <group position={[ROOM_GEOMETRY.width / 2 - 0.08, 1.7, 0]}>
+      <mesh>
+        <boxGeometry args={[0.1, 1, 1.85]} />
+        <meshStandardMaterial color={dim ? "#1b2433" : "#111b2c"} metalness={0.35} roughness={0.5} />
+      </mesh>
+      <mesh rotation={[0, -PI / 2, 0]} position={[-0.056, 0, 0]}>
+        <planeGeometry args={[1.7, 0.86]} />
+        <meshStandardMaterial color={screen} emissive={screen} emissiveIntensity={dim ? 0.12 : 0.85} />
+      </mesh>
+      {[0, 1, 2].map((row) => (
+        <mesh key={row} rotation={[0, -PI / 2, 0]} position={[-0.063, 0.23 - row * 0.22, -0.28]}>
+          <planeGeometry args={[0.9 - row * 0.14, 0.05]} />
+          <meshBasicMaterial color={dim ? "#3c5465" : "#d7f4ff"} transparent opacity={dim ? 0.32 : 0.9} />
+        </mesh>
+      ))}
+      <Html
+        position={[-0.18, 0.62, 0]}
+        center
+        distanceFactor={22}
+        zIndexRange={[25, 5]}
+        calculatePosition={clampBubblePosition}
+        style={{ pointerEvents: "none" }}
+      >
+        <span className={dim ? "office-3d-tv-label office-3d-tv-label-dim" : "office-3d-tv-label"}>AGENDA RAPAT</span>
+      </Html>
+    </group>
+  );
+}
+
 /** Dinding dipecah sesuai pintu: kerja membuka ke depan, kopi/meeting ke belakang dan samping. */
-function OfficeRoomShell({ room, index, active }: { room: OfficeRoom; index: number; active: boolean }) {
+function OfficeRoomShell({ room, index, active, deskOwners, selectedId, hoveredId }: {
+  room: OfficeRoom;
+  index: number;
+  active: boolean;
+  deskOwners: OfficeDeskOwner[];
+  selectedId: string | null;
+  hoveredId: string | null;
+}) {
   const layout = useOfficeLayout();
   const origin = roomOrigin(index, layout);
   const dim = !active;
@@ -478,17 +603,34 @@ function OfficeRoomShell({ room, index, active }: { room: OfficeRoom; index: num
         </span>
       </Html>
 
-      {room.kind === "work" && ROOM_DESK_SPOTS.map((spot, slot) => (
-        <Desk key={slot} roomIndex={index} x={spot.x} y={spot.y} dim={dim} highlight={false} />
-      ))}
+      {room.kind === "work" && ROOM_DESK_SPOTS.map((spot, slot) => {
+        const owner = deskOwners.find((item) => item.roomIndex === index && item.slot === slot);
+        return (
+          <Desk
+            key={slot}
+            roomIndex={index}
+            x={spot.x}
+            y={spot.y}
+            slot={slot}
+            owner={owner}
+            dim={dim}
+            highlight={Boolean(owner && (selectedId === owner.id || hoveredId === owner.id))}
+          />
+        );
+      })}
       {room.kind === "coffee" && (
         <>
-          <CoffeeCorner roomIndex={index} x={50} y={20} dim={dim} />
-          <CoffeeCorner roomIndex={index} x={25} y={62} dim={dim} />
-          <CoffeeCorner roomIndex={index} x={75} y={62} dim={dim} />
+          <CoffeeMachine roomIndex={index} x={50} y={18} dim={dim} />
+          <CoffeeTable roomIndex={index} x={26} y={62} dim={dim} />
+          <CoffeeTable roomIndex={index} x={74} y={62} dim={dim} />
         </>
       )}
-      {room.kind === "meeting" && <MeetingArea roomIndex={index} x={50} y={36} dim={dim} />}
+      {room.kind === "meeting" && (
+        <>
+          <ConferenceTable roomIndex={index} x={50} y={34} dim={dim} />
+          <MeetingTV dim={dim} />
+        </>
+      )}
     </group>
   );
 }
@@ -831,6 +973,7 @@ function CameraRig() {
 
 interface SceneProps {
   employees: OfficeEmployee[];
+  deskOwners: OfficeDeskOwner[];
   movements: OfficeMovement[];
   messages: Map<string, string>;
   frozen: boolean;
@@ -841,7 +984,7 @@ interface SceneProps {
   onHover: (id: string | null) => void;
 }
 
-function Scene({ employees, movements, messages, frozen, focusRoomIndex, selectedId, hoveredId, onSelect, onHover }: SceneProps) {
+function Scene({ employees, deskOwners, movements, messages, frozen, focusRoomIndex, selectedId, hoveredId, onSelect, onHover }: SceneProps) {
   const layout = useOfficeLayout();
   const carRoutes = useMemo(() => carRoutesFor(layout), [layout]);
   const pedestrianRoutes = useMemo(() => pedestrianRoutesFor(layout), [layout]);
@@ -870,6 +1013,9 @@ function Scene({ employees, movements, messages, frozen, focusRoomIndex, selecte
           room={room}
           index={index}
           active={room.kind !== "work" || focusRoomIndex === null || focusRoomIndex === index}
+          deskOwners={deskOwners}
+          selectedId={selectedId}
+          hoveredId={hoveredId}
         />
       ))}
       {carRoutes.map((route) => <Car key={route.id} route={route} frozen={frozen} />)}
@@ -909,7 +1055,7 @@ export function OfficeScene3D(props: SceneProps) {
   }, []);
 
   return (
-    <div className="office-scene-3d" role="img" aria-label="Simulasi kota 3D: dua ruang kerja berisi delapan karyawan, Ruang Kopi, dan Ruang Meeting. Karyawan berjalan lewat koridor antar ruangan; di luar ada jalan dengan mobil dan pejalan kaki. Ini bukan pemantauan karyawan nyata.">
+    <div className="office-scene-3d" role="img" aria-label="Simulasi kota 3D: dua ruang kerja dengan meja berlabel nama karyawan, Ruang Kopi dengan mesin dan meja kopi, serta Ruang Meeting dengan meja konferensi dan TV agenda. Karyawan berjalan lewat koridor antar ruangan; di luar ada jalan dengan mobil dan pejalan kaki. Ini bukan pemantauan karyawan nyata.">
       <Canvas
         shadows
         dpr={[1, 1.4]}
@@ -920,7 +1066,7 @@ export function OfficeScene3D(props: SceneProps) {
           <Scene {...props} />
         </Suspense>
       </Canvas>
-      <div className="office-3d-legend">Simulasi visual · 2 ruang kerja + kopi + meeting · mobil &amp; pejalan kaki bergerak · bukan pelacakan karyawan</div>
+      <div className="office-3d-legend">Simulasi visual · meja berlabel · kopi &amp; meeting · mobil &amp; pejalan kaki bergerak · bukan pelacakan karyawan</div>
       <div className="office-3d-hint" aria-hidden="true">Geser untuk memutar · scroll untuk zoom</div>
     </div>
   );
